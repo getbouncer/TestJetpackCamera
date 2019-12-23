@@ -2,7 +2,7 @@ package com.getbouncer.cardscan.base.ml
 
 import android.os.Handler
 import android.os.Looper
-import com.getbouncer.cardscan.base.domain.CardExpiration
+import com.getbouncer.cardscan.base.domain.CardExpiry
 import com.getbouncer.cardscan.base.domain.CardNumber
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.domain.CardResult
@@ -94,7 +94,7 @@ class MLCardResultManager<ImageFormat>(
 
     private var firstResultTimeMs: Long? = null
     private val numberResults = mutableMapOf<CardNumber, Int>()
-    private val expirationResults = mutableMapOf<CardExpiration, Int>()
+    private val expiryResults = mutableMapOf<CardExpiry, Int>()
     private val imageResults = mutableListOf<Pair<ImageFormat, Int>>()
 
     override fun onResult(result: CardResult<ImageFormat>) {
@@ -111,7 +111,7 @@ class MLCardResultManager<ImageFormat>(
         }
 
         val numberCount = storeNumber(result.ocrResult.number)
-        storeExpiration(result.ocrResult.expiration)
+        storeExpiry(result.ocrResult.expiry)
 
         if (hasReachedTimeout() || numberCount >= config.resultMaxCount) {
             notifyOfResult()
@@ -191,7 +191,7 @@ class MLCardResultManager<ImageFormat>(
 
     private fun getMostLikelyNumber(): CardNumber? = numberResults.maxBy { it.value }?.key
 
-    private fun getMostLikelyExpiry(): CardExpiration? = expirationResults.maxBy { it.value }?.key
+    private fun getMostLikelyExpiry(): CardExpiry? = expiryResults.maxBy { it.value }?.key
 
     @Synchronized
     private fun storeNumber(number: CardNumber?): Int =
@@ -204,10 +204,10 @@ class MLCardResultManager<ImageFormat>(
         }
 
     @Synchronized
-    private fun storeExpiration(expiration: CardExpiration?): Int =
-        if (expiration != null) {
-            val count = 1 + (expirationResults[expiration] ?: 0)
-            expirationResults[expiration] = count
+    private fun storeExpiry(expiry: CardExpiry?): Int =
+        if (expiry != null) {
+            val count = 1 + (expiryResults[expiry] ?: 0)
+            expiryResults[expiry] = count
             count
         } else {
             0
