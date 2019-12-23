@@ -20,7 +20,7 @@ class MockCpuModel(resultHandler: ResultHandler<CardResult<ByteBuffer>>)
         // Simulate analyzing a credit card
 
         val ocrResult = if (Random().nextInt(1000) == 1) {
-            CardOcrResult(CardNumber("1234 5678 9012 3456"), CardExpiration(1, 2, 23))
+            CardOcrResult(CardNumber("1234 5678 9012 3456"), CardExpiry(1, 2, 23))
         } else {
             CardOcrResult(null, null)
         }

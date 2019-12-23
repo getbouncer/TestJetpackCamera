@@ -108,19 +108,19 @@ class CardScanActivity : AppCompatActivity(), CardResultListener<ByteBuffer> {
 
     override fun onCardResult(result: CardOcrResult, frames: List<Pair<ByteBuffer, Int>>) {
         val number = result.number
-        val expiration = result.expiration
-        text.text = (number?.number ?: "____") + " - " + (expiration?.day ?: "0") + "/" + (expiration?.month ?: "0") + "/" + (expiration?.year ?: "0")
+        val expiry = result.expiry
+        text.text = (number?.number ?: "____") + " - " + (expiry?.day ?: "0") + "/" + (expiry?.month ?: "0") + "/" + (expiry?.year ?: "0")
     }
 
     override fun onInterimCardResult(result: CardOcrResult, frame: ByteBuffer?) {
         val number = result.number
-        val expiration = result.expiration
+        val expiry = result.expiry
 
 //        if (frame != null) {
 //            frame.crop()
 //        }
 
-        text.text = "SCANNING " + (number?.number ?: "____") + " - " + (expiration?.day ?: "0") + "/" + (expiration?.month ?: "0") + "/" + (expiration?.year ?: "0")
+        text.text = "SCANNING " + (number?.number ?: "____") + " - " + (expiry?.day ?: "0") + "/" + (expiry?.month ?: "0") + "/" + (expiry?.year ?: "0")
     }
 
     override fun onUpdateProcessingRate(

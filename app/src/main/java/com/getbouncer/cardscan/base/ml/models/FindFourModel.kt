@@ -31,13 +31,13 @@ class FindFourModel(
         private const val USE_GPU = false
 
         private const val DIGIT_CLASSIFIER = 1
-        private const val EXPIRATION_CLASSIFIER = 2
+        private const val EXPIRY_CLASSIFIER = 2
 
         private fun hasDigits(classifiers: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Boolean = digitConfidence(classifiers, row, col) >= 0.5
-        private fun hasExpiration(classifiers: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Boolean = expirationConfidence(classifiers, row, col) >= 0.5
+        private fun hasExpiry(classifiers: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Boolean = expiryConfidence(classifiers, row, col) >= 0.5
 
         private fun digitConfidence(classifiers: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Float = classifiers[0][row][col][DIGIT_CLASSIFIER]
-        private fun expirationConfidence(classifiers: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Float = classifiers[0][row][col][EXPIRATION_CLASSIFIER]
+        private fun expiryConfidence(classifiers: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Float = classifiers[0][row][col][EXPIRY_CLASSIFIER]
     }
 
     override val modelFileResource: Int = R.raw.findfour
@@ -74,21 +74,21 @@ class FindFourModel(
             }
         }
 
-        val expirationBoxes = ArrayList<DetectionBox>()
+        val expiryBoxes = ArrayList<DetectionBox>()
         for (row in 0..ROWS) {
             for (col in 0..COLS) {
-                if (hasExpiration(classifiers, row, col)) {
-                    expirationBoxes.add(DetectionBox(
+                if (hasExpiry(classifiers, row, col)) {
+                    expiryBoxes.add(DetectionBox(
                         getBounds(row, col),
                         row,
                         col,
-                        expirationConfidence(classifiers, row, col)
+                        expiryConfidence(classifiers, row, col)
                     ))
                 }
             }
         }
 
-        return Prediction(digitBoxes, expirationBoxes)
+        return Prediction(digitBoxes, expiryBoxes)
     }
 
     /**
@@ -103,5 +103,5 @@ class FindFourModel(
         return RectF(x, y, x + w, y + h)
     }
 
-    data class Prediction(val detectedDigits: List<DetectionBox>, val detectedExpiration: List<DetectionBox>)
+    data class Prediction(val detectedDigits: List<DetectionBox>, val detectedExpiry: List<DetectionBox>)
 }
