@@ -14,8 +14,8 @@ import java.nio.channels.FileChannel
  * A result handler for image processing. This is called when results are available from an
  * [MLImageAnalyzerModel].
  */
-interface ResultHandler<U> {
-    fun onResult(result: U)
+interface ResultHandler<T, U> {
+    fun onResult(result: U, data: T)
 }
 
 /**
@@ -34,10 +34,11 @@ interface MLModel<T, U> {
  * APIs require a analyzer with a callback, this adapts the ML model to use a [ResultHandler] as a
  * callback for its results.
  */
-abstract class MLImageAnalyzerModel<T, U>(private val resultHandler: ResultHandler<U>)
+abstract class MLImageAnalyzerModel<T, U>(private val resultHandler: ResultHandler<T, U>)
     : ImageAnalysis.Analyzer, MLModel<T, U> {
     override fun analyze(image: ImageProxy?, rotationDegrees: Int) {
-        resultHandler.onResult(analyze(convertImageData(image, rotationDegrees)))
+        val data = convertImageData(image, rotationDegrees)
+        resultHandler.onResult(analyze(data), data)
     }
 
     /**

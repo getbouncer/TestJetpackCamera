@@ -10,20 +10,19 @@ import android.view.ViewGroup
 import androidx.camera.core.*
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.getbouncer.cardscan.base.domain.CardImageData
 import com.getbouncer.cardscan.base.domain.CardOcrResult
-import com.getbouncer.cardscan.base.image.crop
-import com.getbouncer.cardscan.base.ml.CardResultListener
-import com.getbouncer.cardscan.base.ml.MLCardResultManager
-import com.getbouncer.cardscan.base.ml.MLCardResultManagerConfig
+import com.getbouncer.cardscan.base.ml.MLAggregateResultListener
+import com.getbouncer.cardscan.base.ml.MLCardResultAggregator
 import com.getbouncer.cardscan.base.ml.MLExecutorFactory
+import com.getbouncer.cardscan.base.ml.MLResultAggregatorConfig
 import com.getbouncer.cardscan.base.ml.models.MockCpuModel
 import kotlinx.android.synthetic.main.activity_main.*
-import java.nio.ByteBuffer
 import kotlin.math.round
 
 private const val CAMERA_PERMISSION_REQUEST = 1200
 
-class CardScanActivity : AppCompatActivity(), CardResultListener<ByteBuffer> {
+class CardScanActivity : AppCompatActivity(), MLAggregateResultListener<CardImageData, CardOcrResult> {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,8 +50,8 @@ class CardScanActivity : AppCompatActivity(), CardResultListener<ByteBuffer> {
     }
 
     private fun startCamera() {
-        val mlResultManagerConfig = MLCardResultManagerConfig.Builder().build()
-        val mlResultManager = MLCardResultManager(mlResultManagerConfig, this)
+        val mlResultManagerConfig = MLResultAggregatorConfig.Builder().build()
+        val mlResultManager = MLCardResultAggregator(mlResultManagerConfig, this)
         val mlModel = MockCpuModel(mlResultManager)
         val mlExecutorFactory = MLExecutorFactory(mlModel)
 
@@ -106,13 +105,20 @@ class CardScanActivity : AppCompatActivity(), CardResultListener<ByteBuffer> {
         updateTransform()
     }
 
-    override fun onCardResult(result: CardOcrResult, frames: List<Pair<ByteBuffer, Int>>) {
+    override fun onUpdateProcessingRate(
+        avgFramesPerSecond: Double,
+        currentFramesPerSecond: Double
+    ) {
+        framerate.text = "FR: avg=" + round(avgFramesPerSecond) + ", cur=" + round(currentFramesPerSecond)
+    }
+
+    override fun onResult(result: CardOcrResult, dataFrames: List<CardImageData>) {
         val number = result.number
         val expiry = result.expiry
         text.text = (number?.number ?: "____") + " - " + (expiry?.day ?: "0") + "/" + (expiry?.month ?: "0") + "/" + (expiry?.year ?: "0")
     }
 
-    override fun onInterimCardResult(result: CardOcrResult, frame: ByteBuffer?) {
+    override fun onInterimResult(result: CardOcrResult, dataFrames: CardImageData) {
         val number = result.number
         val expiry = result.expiry
 
@@ -121,12 +127,5 @@ class CardScanActivity : AppCompatActivity(), CardResultListener<ByteBuffer> {
 //        }
 
         text.text = "SCANNING " + (number?.number ?: "____") + " - " + (expiry?.day ?: "0") + "/" + (expiry?.month ?: "0") + "/" + (expiry?.year ?: "0")
-    }
-
-    override fun onUpdateProcessingRate(
-        avgFramesPerSecond: Double,
-        currentFramesPerSecond: Double
-    ) {
-        framerate.text = "FR: avg=" + round(avgFramesPerSecond) + ", cur=" + round(currentFramesPerSecond)
     }
 }

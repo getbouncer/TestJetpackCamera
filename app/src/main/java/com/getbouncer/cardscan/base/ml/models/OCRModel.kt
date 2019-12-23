@@ -29,7 +29,7 @@ class OCRModel(
     private val factory: MLResourceModelFactory,
     private val context: Context,
     private val cardRect: RectF,
-    resultHandler: ResultHandler<String>
+    resultHandler: ResultHandler<Bitmap?, String>
 ) : MLImageAnalyzerModel<Bitmap?, String>(resultHandler) {
 
     override val supportsMultiThreading: Boolean = true
