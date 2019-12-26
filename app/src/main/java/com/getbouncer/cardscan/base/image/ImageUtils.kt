@@ -6,6 +6,7 @@ import android.content.pm.ConfigurationInfo
 import android.graphics.*
 import android.util.Size
 import androidx.camera.core.ImageProxy
+import com.getbouncer.cardscan.base.domain.CardImage
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.IntBuffer
@@ -67,6 +68,9 @@ fun ImageProxy.toRGBAByteBuffer(): ByteBuffer {
 
     return rgbaFloat
 }
+
+fun ImageProxy.toCardImage(rotationDegrees: Int): CardImage =
+    CardImage(this.toRGBAByteBuffer(), rotationDegrees, Size(this.width, this.height))
 
 fun hasOpenGl31(context: Context): Boolean {
     val openGlVersion = 0x00030001

@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.getbouncer.cardscan.base.domain.CardExpiry
+import com.getbouncer.cardscan.base.domain.CardImage
 import com.getbouncer.cardscan.base.domain.CardNumber
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 
@@ -22,9 +23,9 @@ interface MLAggregateResultListener<DataFrame, ModelResult> {
      * useful for displaying a debug window.
      *
      * @param result: the card result from the model
-     * @param dataFrames: the data frame that produced this result.
+     * @param dataFrame: the data frame that produced this result.
      */
-    fun onInterimResult(result: ModelResult, dataFrames: DataFrame)
+    fun onInterimResult(result: ModelResult, dataFrame: DataFrame)
 
     /**
      * The processing rate has been updated. This is useful for debugging and measuring performance.
@@ -38,14 +39,16 @@ interface MLAggregateResultListener<DataFrame, ModelResult> {
 data class MLResultAggregatorConfig(
     val maxTotalAggregationTimeNs: Long,
     val maxSavedFrames: Int,
-    val frameRateUpdateIntervalNs: Long
+    val frameRateUpdateIntervalNs: Long,
+    val frameStorageBytes: Int
 ) {
 
     class Builder {
         companion object {
             private const val DEFAULT_MAX_TOTAL_AGGREGATION_TIME_NS = 1500000000L // 1.5 seconds
-            private const val DEFAULT_MAX_OBJECT_DETECTION_FRAMES = 3
+            private const val DEFAULT_MAX_OBJECT_DETECTION_FRAMES = -1  // Unlimited saved frames
             private const val DEFAULT_FRAME_RATE_UPDATE_INTERVAL_NS = 1000000000L // 1 second
+            private const val DEFAULT_FRAME_STORAGE_BYTES = 0x4000000 // 64MB
         }
 
         private var maxTotalAggregationTimeNs: Long =
@@ -54,6 +57,8 @@ data class MLResultAggregatorConfig(
             DEFAULT_MAX_OBJECT_DETECTION_FRAMES
         private var frameRateUpdateIntervalNs: Long =
             DEFAULT_FRAME_RATE_UPDATE_INTERVAL_NS
+        private var frameStorageBytes: Int =
+            DEFAULT_FRAME_STORAGE_BYTES
 
         fun withMaxTotalAggregationTimeNs(maxTotalAggregationTimeNs: Long) {
             this.maxTotalAggregationTimeNs = maxTotalAggregationTimeNs
@@ -67,11 +72,16 @@ data class MLResultAggregatorConfig(
             this.frameRateUpdateIntervalNs = frameRateUpdateIntervalNs
         }
 
+        fun withFrameStorageBytes(frameStorageBytes: Int) {
+            this.frameStorageBytes = frameStorageBytes
+        }
+
         fun build() =
             MLResultAggregatorConfig(
                 maxTotalAggregationTimeNs,
                 maxSavedFrames,
-                frameRateUpdateIntervalNs
+                frameRateUpdateIntervalNs,
+                frameStorageBytes
             )
     }
 }
@@ -100,9 +110,12 @@ abstract class MLResultAggregator<DataFrame, ModelResult>(
             firstResultTimeNs = System.nanoTime()
         }
 
-        // TODO: this should be based on memory, not fixed. It should also be the least blurry
-        //       images available.
-        if (shouldSaveFrame(result, data) && savedFrames.size < config.maxSavedFrames) {
+        // TODO: This should store the least blurry images available.
+        if (shouldSaveFrame(result, data)
+            && (config.maxSavedFrames < 0 || savedFrames.size < config.maxSavedFrames)
+            && (config.frameStorageBytes < 0 || savedFrames.size * getFrameSizeBytes(data) < config.frameStorageBytes)
+            && (config.maxSavedFrames >= 0 || config.frameStorageBytes >= 0)
+        ) {
             savedFrames.add(data)
         }
 
@@ -131,6 +144,11 @@ abstract class MLResultAggregator<DataFrame, ModelResult>(
      * Determine if a data frame should be saved for the final result
      */
     abstract fun shouldSaveFrame(result: ModelResult, dataFrame: DataFrame): Boolean
+
+    /**
+     * Determine the size in memory that this data frame takes up
+     */
+    abstract fun getFrameSizeBytes(dataFrame: DataFrame): Int
 
     /**
      * Calculate the current rate at which the model is processing images. Notify the listener of
@@ -218,7 +236,7 @@ abstract class MLResultAggregator<DataFrame, ModelResult>(
  * The listener will be notified of a result once a threshold number of matching results is received
  * or the time since the first result exceeds a threshold.
  */
-class MLCardResultAggregator<ImageFormat>(
+abstract class MLCardResultAggregator<ImageFormat>(
     config: MLResultAggregatorConfig,
     listener: MLAggregateResultListener<ImageFormat, CardOcrResult>,
     private val requiredAgreementCount: Int? = null
@@ -269,4 +287,12 @@ class MLCardResultAggregator<ImageFormat>(
 
     override fun shouldSaveFrame(result: CardOcrResult, dataFrame: ImageFormat): Boolean =
         result.number != null
+}
+
+class MLCardImageResultAggregator(
+    config: MLResultAggregatorConfig,
+    listener: MLAggregateResultListener<CardImage, CardOcrResult>,
+    requiredAgreementCount: Int? = null
+) : MLCardResultAggregator<CardImage>(config, listener, requiredAgreementCount) {
+    override fun getFrameSizeBytes(dataFrame: CardImage): Int = dataFrame.image.limit()
 }

@@ -1,13 +1,11 @@
 package com.getbouncer.cardscan.base.ml.models
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.RectF
-import android.util.Size
+import android.graphics.Rect
 import androidx.camera.core.ImageProxy
+import com.getbouncer.cardscan.base.domain.CardImage
 import com.getbouncer.cardscan.base.image.crop
-import com.getbouncer.cardscan.base.image.toBitmap
-import com.getbouncer.cardscan.base.image.toRGBAByteBuffer
+import com.getbouncer.cardscan.base.image.toCardImage
 import com.getbouncer.cardscan.base.ml.MLImageAnalyzerModel
 import com.getbouncer.cardscan.base.ml.MLResourceModelFactory
 import com.getbouncer.cardscan.base.ml.ResultHandler
@@ -28,27 +26,25 @@ import com.getbouncer.cardscan.base.ml.ResultHandler
 class OCRModel(
     private val factory: MLResourceModelFactory,
     private val context: Context,
-    private val cardRect: RectF,
-    resultHandler: ResultHandler<Bitmap?, String>
-) : MLImageAnalyzerModel<Bitmap?, String>(resultHandler) {
+    private val cardRect: Rect,
+    resultHandler: ResultHandler<CardImage, String>
+) : MLImageAnalyzerModel<CardImage, String>(resultHandler) {
 
     override val supportsMultiThreading: Boolean = true
 
-    override fun analyze(data: Bitmap?): String {
-        if (data != null) {
-            val croppedImage = data.crop(cardRect)
-            val findFourPrediction = FindFourModel(factory, context, Size(data.width, data.height))
-                .analyze(croppedImage.toRGBAByteBuffer())
-        }
+    override fun analyze(data: CardImage): String {
+        val croppedImage = data.image.crop(data.size, cardRect)
+        val findFourPrediction = FindFourModel(factory, context, data.size)
+            .analyze(data.image)
 
         // TODO: implement OCR using the new model
         return ""
     }
 
-    override fun convertImageData(image: ImageProxy?, rotationDegrees: Int): Bitmap? {
+    override fun convertImageData(image: ImageProxy, rotationDegrees: Int): CardImage {
         /* TODO: decide if bitmap is the best way to transport the image, or if we should use a
              byte buffer instead. The goal here is to minimize the number of transformations
              we make to the image (crop, rotate, resize) to speed up processing time. */
-        return image?.toBitmap()
+        return image.toCardImage(rotationDegrees)
     }
 }

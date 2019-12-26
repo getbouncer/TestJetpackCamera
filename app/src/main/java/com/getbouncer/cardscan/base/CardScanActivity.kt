@@ -12,10 +12,10 @@ import android.view.ViewGroup
 import androidx.camera.core.*
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.getbouncer.cardscan.base.domain.CardImageData
+import com.getbouncer.cardscan.base.domain.CardImage
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.ml.MLAggregateResultListener
-import com.getbouncer.cardscan.base.ml.MLCardResultAggregator
+import com.getbouncer.cardscan.base.ml.MLCardImageResultAggregator
 import com.getbouncer.cardscan.base.ml.MLExecutorFactory
 import com.getbouncer.cardscan.base.ml.MLResultAggregatorConfig
 import com.getbouncer.cardscan.base.ml.models.MockCpuModel
@@ -24,7 +24,7 @@ import kotlin.math.round
 
 private const val CAMERA_PERMISSION_REQUEST = 1200
 
-class CardScanActivity : AppCompatActivity(), MLAggregateResultListener<CardImageData, CardOcrResult> {
+class CardScanActivity : AppCompatActivity(), MLAggregateResultListener<CardImage, CardOcrResult> {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,7 +53,7 @@ class CardScanActivity : AppCompatActivity(), MLAggregateResultListener<CardImag
 
     private fun startCamera() {
         val mlResultManagerConfig = MLResultAggregatorConfig.Builder().build()
-        val mlResultManager = MLCardResultAggregator(mlResultManagerConfig, this)
+        val mlResultManager = MLCardImageResultAggregator(mlResultManagerConfig, this)
         val mlModel = MockCpuModel(mlResultManager)
         val mlExecutor = MLExecutorFactory(mlModel).getExecutor()
 
@@ -113,14 +113,14 @@ class CardScanActivity : AppCompatActivity(), MLAggregateResultListener<CardImag
         Log.i("FR", "FR: avg=$avgFramesPerSecond, inst=$instFramesPerSecond")
     }
 
-    override fun onResult(result: CardOcrResult, dataFrames: List<CardImageData>) {
+    override fun onResult(result: CardOcrResult, dataFrames: List<CardImage>) {
         val number = result.number
         val expiry = result.expiry
         text.text = "${number?.number ?: "____"} - ${expiry?.day ?: "0"}/${expiry?.month ?: "0"}/${expiry?.year ?: "0"}"
         Log.i("RESULT", "SCANNING ${number?.number ?: "____"} - ${expiry?.day ?: "0"}/${expiry?.month ?: "0"}/${expiry?.year ?: "0"}")
     }
 
-    override fun onInterimResult(result: CardOcrResult, dataFrames: CardImageData) {
+    override fun onInterimResult(result: CardOcrResult, dataFrame: CardImage) {
         // Don't display anything on interim
     }
 }

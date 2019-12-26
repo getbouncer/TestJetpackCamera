@@ -11,7 +11,7 @@ import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 
 /**
- * A result handler for image processing. This is called when results are available from an
+ * A result handler for data processing. This is called when results are available from an
  * [MLImageAnalyzerModel].
  */
 interface ResultHandler<T, U> {
@@ -36,7 +36,7 @@ interface MLModel<T, U> {
  */
 abstract class MLImageAnalyzerModel<T, U>(private val resultHandler: ResultHandler<T, U>)
     : ImageAnalysis.Analyzer, MLModel<T, U> {
-    override fun analyze(image: ImageProxy?, rotationDegrees: Int) {
+    override fun analyze(image: ImageProxy, rotationDegrees: Int) {
         val data = convertImageData(image, rotationDegrees)
         resultHandler.onResult(analyze(data), data)
     }
@@ -44,7 +44,7 @@ abstract class MLImageAnalyzerModel<T, U>(private val resultHandler: ResultHandl
     /**
      * Convert the Android CameraX [ImageProxy] to something this model can work with.
      */
-    abstract fun convertImageData(image: ImageProxy?, rotationDegrees: Int): T
+    abstract fun convertImageData(image: ImageProxy, rotationDegrees: Int): T
 }
 
 /**

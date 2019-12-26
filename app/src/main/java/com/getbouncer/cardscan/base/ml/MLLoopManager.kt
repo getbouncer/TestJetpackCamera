@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.ml.models
+package com.getbouncer.cardscan.base.ml
 
 /**
  * handle the main loop and completion loop
