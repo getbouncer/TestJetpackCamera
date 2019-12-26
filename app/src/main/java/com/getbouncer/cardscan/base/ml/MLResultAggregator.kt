@@ -2,6 +2,7 @@ package com.getbouncer.cardscan.base.ml
 
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.getbouncer.cardscan.base.domain.CardExpiry
 import com.getbouncer.cardscan.base.domain.CardNumber
 import com.getbouncer.cardscan.base.domain.CardOcrResult
@@ -35,22 +36,26 @@ interface MLAggregateResultListener<DataFrame, ModelResult> {
 }
 
 data class MLResultAggregatorConfig(
-    val maxTotalAggregationTimeNs: Int,
-    val maxSavedFrames: Int
+    val maxTotalAggregationTimeNs: Long,
+    val maxSavedFrames: Int,
+    val frameRateUpdateIntervalNs: Long
 ) {
 
     class Builder {
         companion object {
-            private const val DEFAULT_MAX_TOTAL_AGGREGATION_TIME_NS = 1500000 // 1.5 seconds
+            private const val DEFAULT_MAX_TOTAL_AGGREGATION_TIME_NS = 1500000000L // 1.5 seconds
             private const val DEFAULT_MAX_OBJECT_DETECTION_FRAMES = 3
+            private const val DEFAULT_FRAME_RATE_UPDATE_INTERVAL_NS = 1000000000L // 1 second
         }
 
-        private var maxTotalAggregationTimeNs: Int =
+        private var maxTotalAggregationTimeNs: Long =
             DEFAULT_MAX_TOTAL_AGGREGATION_TIME_NS
         private var maxSavedFrames: Int =
             DEFAULT_MAX_OBJECT_DETECTION_FRAMES
+        private var frameRateUpdateIntervalNs: Long =
+            DEFAULT_FRAME_RATE_UPDATE_INTERVAL_NS
 
-        fun withMaxTotalAggregationTimeNs(maxTotalAggregationTimeNs: Int) {
+        fun withMaxTotalAggregationTimeNs(maxTotalAggregationTimeNs: Long) {
             this.maxTotalAggregationTimeNs = maxTotalAggregationTimeNs
         }
 
@@ -58,10 +63,15 @@ data class MLResultAggregatorConfig(
             this.maxSavedFrames = maxSavedFrames
         }
 
+        fun withFrameRateUpdateIntervalNs(frameRateUpdateIntervalNs: Long) {
+            this.frameRateUpdateIntervalNs = frameRateUpdateIntervalNs
+        }
+
         fun build() =
             MLResultAggregatorConfig(
                 maxTotalAggregationTimeNs,
-                maxSavedFrames
+                maxSavedFrames,
+                frameRateUpdateIntervalNs
             )
     }
 }
@@ -71,10 +81,15 @@ abstract class MLResultAggregator<DataFrame, ModelResult>(
     private val listener: MLAggregateResultListener<DataFrame, ModelResult>
 ) : ResultHandler<DataFrame, ModelResult> {
 
+    companion object {
+        private const val NANOS_IN_SECONDS = 1000000000
+    }
+
     private var firstResultTimeNs: Long? = null
     private var firstFrameTimeNs: Long? = null
-    private var lastFrameTimeNs: Long? = null
-    private var framesProcessed: Long = 0
+    private var lastNotifyTimeNs: Long? = null
+    private var totalFramesProcessed: Long = 0
+    private var framesProcessedSinceLastUpdate: Long = 0
 
     private val savedFrames = mutableListOf<DataFrame>()
 
@@ -122,31 +137,41 @@ abstract class MLResultAggregator<DataFrame, ModelResult>(
      * the result.
      */
     private fun trackAndCalculateFrameRate() {
-        val currentTimeNs = System.nanoTime()
-        val lastFrameTimeNs = this.lastFrameTimeNs ?: currentTimeNs
-        val firstFrameTimeNs = this.firstFrameTimeNs ?: currentTimeNs
-        this.lastFrameTimeNs = currentTimeNs
-
-        framesProcessed++
+        val nowNs = System.nanoTime()
 
         if (this.firstFrameTimeNs == null) {
-            this.firstFrameTimeNs = currentTimeNs
+            this.firstFrameTimeNs = nowNs
         }
 
-        val instFramesPerSecond = if (currentTimeNs > lastFrameTimeNs) {
-            1000.0 / (currentTimeNs - lastFrameTimeNs)
-        } else {
-            0.0
-        }
+        totalFramesProcessed++
+        framesProcessedSinceLastUpdate++
 
-        val avgFramesPerSecond = if (currentTimeNs > firstFrameTimeNs) {
-            framesProcessed * 1000.0 / (currentTimeNs - firstFrameTimeNs)
-        } else {
-            0.0
-        }
+        if (shouldNotifyOfFrameRate(nowNs)) {
+            val lastNotifyTimeNs = this.lastNotifyTimeNs ?: nowNs
+            val firstFrameTimeNs = this.firstFrameTimeNs ?: nowNs
 
-        notifyOfFrameRate(avgFramesPerSecond, instFramesPerSecond)
+            Log.d("AGW", "DURATION: ${(nowNs - lastNotifyTimeNs) / NANOS_IN_SECONDS}  RECENT FRAMES: $framesProcessedSinceLastUpdate")
+
+            val instFramesPerSecond = if (nowNs > lastNotifyTimeNs) {
+                framesProcessedSinceLastUpdate.toDouble() * NANOS_IN_SECONDS / (nowNs - lastNotifyTimeNs)
+            } else {
+                0.0
+            }
+
+            val avgFramesPerSecond = if (nowNs > firstFrameTimeNs) {
+                totalFramesProcessed.toDouble() * NANOS_IN_SECONDS / (nowNs - firstFrameTimeNs)
+            } else {
+                0.0
+            }
+
+            framesProcessedSinceLastUpdate = 0
+            this.lastNotifyTimeNs = nowNs
+            notifyOfFrameRate(avgFramesPerSecond, instFramesPerSecond)
+        }
     }
+
+    private fun shouldNotifyOfFrameRate(nowNs: Long): Boolean =
+        nowNs - (lastNotifyTimeNs ?: 0) > config.frameRateUpdateIntervalNs
 
     /**
      * Send the listener the current frame rates on the main thread.

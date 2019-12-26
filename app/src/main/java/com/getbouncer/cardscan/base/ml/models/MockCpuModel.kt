@@ -18,7 +18,7 @@ class MockCpuModel(resultHandler: ResultHandler<CardImageData, CardOcrResult>)
 
         // Simulate analyzing a credit card
 
-        return if (Random().nextInt(1000) == 1) {
+        return if (Random().nextInt(100) == 1) {
             CardOcrResult(CardNumber("1234 5678 9012 3456"), CardExpiry(1, 2, 23))
         } else {
             CardOcrResult(null, null)

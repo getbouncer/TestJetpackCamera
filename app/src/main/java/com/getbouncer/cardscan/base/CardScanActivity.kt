@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.graphics.Matrix
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.util.Log
+import android.util.Size
 import android.view.Surface
 import android.view.ViewGroup
 import androidx.camera.core.*
@@ -53,16 +55,17 @@ class CardScanActivity : AppCompatActivity(), MLAggregateResultListener<CardImag
         val mlResultManagerConfig = MLResultAggregatorConfig.Builder().build()
         val mlResultManager = MLCardResultAggregator(mlResultManagerConfig, this)
         val mlModel = MockCpuModel(mlResultManager)
-        val mlExecutorFactory = MLExecutorFactory(mlModel)
+        val mlExecutor = MLExecutorFactory(mlModel).getExecutor()
 
         val imageAnalysisConfig = ImageAnalysisConfig.Builder()
             .setTargetRotation(Surface.ROTATION_0)
             .build()
         val imageAnalysis = ImageAnalysis(imageAnalysisConfig)
-        imageAnalysis.setAnalyzer(mlExecutorFactory.getExecutor(), mlModel)
+        imageAnalysis.setAnalyzer(mlExecutor, mlModel)
 
         val previewConfig: PreviewConfig = PreviewConfig.Builder()
             .setLensFacing(CameraX.LensFacing.BACK)
+            .setTargetResolution(Size(texture.width, texture.height))
             .build()
         val preview = Preview(previewConfig)
         preview.setOnPreviewOutputUpdateListener { onPreviewUpdated(it) }
@@ -105,27 +108,19 @@ class CardScanActivity : AppCompatActivity(), MLAggregateResultListener<CardImag
         updateTransform()
     }
 
-    override fun onUpdateProcessingRate(
-        avgFramesPerSecond: Double,
-        currentFramesPerSecond: Double
-    ) {
-        framerate.text = "FR: avg=" + round(avgFramesPerSecond) + ", cur=" + round(currentFramesPerSecond)
+    override fun onUpdateProcessingRate(avgFramesPerSecond: Double, instFramesPerSecond: Double) {
+        framerate.text = "FR: avg=${round(avgFramesPerSecond)}, inst=${round(instFramesPerSecond)}"
+        Log.i("FR", "FR: avg=$avgFramesPerSecond, inst=$instFramesPerSecond")
     }
 
     override fun onResult(result: CardOcrResult, dataFrames: List<CardImageData>) {
         val number = result.number
         val expiry = result.expiry
-        text.text = (number?.number ?: "____") + " - " + (expiry?.day ?: "0") + "/" + (expiry?.month ?: "0") + "/" + (expiry?.year ?: "0")
+        text.text = "${number?.number ?: "____"} - ${expiry?.day ?: "0"}/${expiry?.month ?: "0"}/${expiry?.year ?: "0"}"
+        Log.i("RESULT", "SCANNING ${number?.number ?: "____"} - ${expiry?.day ?: "0"}/${expiry?.month ?: "0"}/${expiry?.year ?: "0"}")
     }
 
     override fun onInterimResult(result: CardOcrResult, dataFrames: CardImageData) {
-        val number = result.number
-        val expiry = result.expiry
-
-//        if (frame != null) {
-//            frame.crop()
-//        }
-
-        text.text = "SCANNING " + (number?.number ?: "____") + " - " + (expiry?.day ?: "0") + "/" + (expiry?.month ?: "0") + "/" + (expiry?.year ?: "0")
+        // Don't display anything on interim
     }
 }
