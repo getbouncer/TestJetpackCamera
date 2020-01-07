@@ -18,7 +18,7 @@ class MessageBus<E : FixedMemorySize>(private var maximumSizeInBytes: Int) {
 
     @Synchronized
     fun popMessage(): E? =
-        if (vector.size > 0) {
+        if (notEmpty()) {
             val item = vector.elementAt(vector.size - 1)
             vector.removeElementAt(vector.size - 1)
             sizeInBytes -= item.sizeInBytes
@@ -26,6 +26,8 @@ class MessageBus<E : FixedMemorySize>(private var maximumSizeInBytes: Int) {
         } else {
             null
         }
+
+    fun notEmpty(): Boolean = vector.size > 0
 
     @Synchronized
     private fun cullOverSize() {

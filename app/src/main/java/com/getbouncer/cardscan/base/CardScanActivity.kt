@@ -22,7 +22,7 @@ import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.ml.AggregateResultListener
 import com.getbouncer.cardscan.base.ml.CardImageOcrResultAggregator
 import com.getbouncer.cardscan.base.ml.ResultAggregatorConfig
-import com.getbouncer.cardscan.base.ml.TerminatingImageAnalyzerLoop
+import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
 import com.getbouncer.cardscan.base.ml.models.MockCpuAnalyzer
 import kotlinx.android.synthetic.main.activity_main.framerate
 import kotlinx.android.synthetic.main.activity_main.text
@@ -64,7 +64,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<CardImage,
 
     private fun startCamera() {
         val resultAggregatorConfig = ResultAggregatorConfig.Builder().build()
-        val mainLoop = TerminatingImageAnalyzerLoop(
+        val mainLoop = MemoryBoundAnalyzerLoop(
             maximumFrameMemoryBytes = DEFAULT_FRAME_STORAGE_BYTES,
             analyzer = MockCpuAnalyzer(),
             resultHandler = CardImageOcrResultAggregator(resultAggregatorConfig, this)

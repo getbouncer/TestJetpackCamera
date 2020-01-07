@@ -48,7 +48,7 @@ interface AggregateResultListener<DataFrame : FixedMemorySize, ModelResult> {
 /**
  * A result handler which listens until some condition is met, then terminates
  */
-abstract class TerminatingResultHandler<Input, Output> : ResultHandler<Input, Output> {
+abstract class FinishingResultHandler<Input, Output> : ResultHandler<Input, Output> {
     private var listening = true
 
     fun isListening(): Boolean = listening
@@ -120,7 +120,7 @@ data class ResultAggregatorConfig(
 abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
     private val config: ResultAggregatorConfig,
     private val listener: AggregateResultListener<DataFrame, ModelResult>
-) : TerminatingResultHandler<DataFrame, ModelResult>() {
+) : FinishingResultHandler<DataFrame, ModelResult>() {
 
     companion object {
         private const val NANOS_IN_SECONDS = 1000000000
