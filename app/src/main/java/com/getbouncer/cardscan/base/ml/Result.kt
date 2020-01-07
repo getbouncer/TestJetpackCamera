@@ -2,30 +2,39 @@ package com.getbouncer.cardscan.base.ml
 
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import com.getbouncer.cardscan.base.domain.CardExpiry
 import com.getbouncer.cardscan.base.domain.CardImage
 import com.getbouncer.cardscan.base.domain.CardNumber
 import com.getbouncer.cardscan.base.domain.CardOcrResult
+import com.getbouncer.cardscan.base.domain.FixedMemorySize
+import com.getbouncer.cardscan.base.util.CreditCardUtils
 
-interface MLAggregateResultListener<DataFrame, ModelResult> {
+/**
+ * A result handler for data processing. This is called when results are available from an
+ * [Analyzer].
+ */
+interface ResultHandler<Input, Output> {
+    fun onResult(result: Output, data: Input)
+}
+
+interface AggregateResultListener<DataFrame : FixedMemorySize, ModelResult> {
 
     /**
      * The aggregated result of a model is available.
      *
      * @param result: the card result from the model
-     * @param dataFrames: data frames captured during processing that can be used in the completion loop
+     * @param frames: data frames captured during processing that can be used in the completion loop
      */
-    fun onResult(result: ModelResult, dataFrames: List<DataFrame>)
+    fun onResult(result: ModelResult, frames: List<DataFrame>)
 
     /**
      * An interim result is available, but the model is still processing more data frames. This is
      * useful for displaying a debug window.
      *
      * @param result: the card result from the model
-     * @param dataFrame: the data frame that produced this result.
+     * @param frame: the data frame that produced this result.
      */
-    fun onInterimResult(result: ModelResult, dataFrame: DataFrame)
+    fun onInterimResult(result: ModelResult, frame: DataFrame)
 
     /**
      * The processing rate has been updated. This is useful for debugging and measuring performance.
@@ -36,19 +45,34 @@ interface MLAggregateResultListener<DataFrame, ModelResult> {
     fun onUpdateProcessingRate(avgFramesPerSecond: Double, instFramesPerSecond: Double)
 }
 
-data class MLResultAggregatorConfig(
+/**
+ * A result handler which listens until some condition is met, then terminates
+ */
+abstract class TerminatingResultHandler<Input, Output> : ResultHandler<Input, Output> {
+    private var listening = true
+
+    fun isListening(): Boolean = listening
+
+    fun stopListening() {
+        listening = false
+    }
+}
+
+data class ResultAggregatorConfig(
     val maxTotalAggregationTimeNs: Long,
     val maxSavedFrames: Int,
-    val frameRateUpdateIntervalNs: Long,
-    val frameStorageBytes: Int
+    val frameStorageBytes: Int,
+    val trackFrameRate: Boolean,
+    val frameRateUpdateIntervalNs: Long
 ) {
 
     class Builder {
         companion object {
             private const val DEFAULT_MAX_TOTAL_AGGREGATION_TIME_NS = 1500000000L // 1.5 seconds
             private const val DEFAULT_MAX_OBJECT_DETECTION_FRAMES = -1  // Unlimited saved frames
-            private const val DEFAULT_FRAME_RATE_UPDATE_INTERVAL_NS = 1000000000L // 1 second
             private const val DEFAULT_FRAME_STORAGE_BYTES = 0x4000000 // 64MB
+            private const val DEFAULT_TRACK_FRAME_RATE = false
+            private const val DEFAULT_FRAME_RATE_UPDATE_INTERVAL_NS = 1000000000L // 1 second
         }
 
         private var maxTotalAggregationTimeNs: Long =
@@ -59,6 +83,8 @@ data class MLResultAggregatorConfig(
             DEFAULT_FRAME_RATE_UPDATE_INTERVAL_NS
         private var frameStorageBytes: Int =
             DEFAULT_FRAME_STORAGE_BYTES
+        private var trackFrameRate: Boolean =
+            DEFAULT_TRACK_FRAME_RATE
 
         fun withMaxTotalAggregationTimeNs(maxTotalAggregationTimeNs: Long) {
             this.maxTotalAggregationTimeNs = maxTotalAggregationTimeNs
@@ -76,20 +102,25 @@ data class MLResultAggregatorConfig(
             this.frameStorageBytes = frameStorageBytes
         }
 
+        fun withTrackFrameRate(trackFrameRate: Boolean) {
+            this.trackFrameRate = trackFrameRate
+        }
+
         fun build() =
-            MLResultAggregatorConfig(
+            ResultAggregatorConfig(
                 maxTotalAggregationTimeNs,
                 maxSavedFrames,
-                frameRateUpdateIntervalNs,
-                frameStorageBytes
+                frameStorageBytes,
+                trackFrameRate,
+                frameRateUpdateIntervalNs
             )
     }
 }
 
-abstract class MLResultAggregator<DataFrame, ModelResult>(
-    private val config: MLResultAggregatorConfig,
-    private val listener: MLAggregateResultListener<DataFrame, ModelResult>
-) : ResultHandler<DataFrame, ModelResult> {
+abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
+    private val config: ResultAggregatorConfig,
+    private val listener: AggregateResultListener<DataFrame, ModelResult>
+) : TerminatingResultHandler<DataFrame, ModelResult>() {
 
     companion object {
         private const val NANOS_IN_SECONDS = 1000000000
@@ -100,22 +131,28 @@ abstract class MLResultAggregator<DataFrame, ModelResult>(
     private var lastNotifyTimeNs: Long? = null
     private var totalFramesProcessed: Long = 0
     private var framesProcessedSinceLastUpdate: Long = 0
+    private var savedFramesSizeBytes: Long = 0
 
     private val savedFrames = mutableListOf<DataFrame>()
 
     override fun onResult(result: ModelResult, data: DataFrame) {
-        trackAndCalculateFrameRate()
+        if (!isListening()) {
+            return
+        }
+
+        if (config.trackFrameRate) {
+            trackAndNotifyOfFrameRate()
+        }
 
         if (isValidResult(result) && firstResultTimeNs == null) {
             firstResultTimeNs = System.nanoTime()
         }
 
-        // TODO: This should store the least blurry images available.
-        if (shouldSaveFrame(result, data)
-            && (config.maxSavedFrames < 0 || savedFrames.size < config.maxSavedFrames)
-            && (config.frameStorageBytes < 0 || savedFrames.size * getFrameSizeBytes(data) < config.frameStorageBytes)
-            && (config.maxSavedFrames >= 0 || config.frameStorageBytes >= 0)
+        if ((config.maxSavedFrames < 0 || savedFrames.size < config.maxSavedFrames)
+            && (config.frameStorageBytes < 0 || savedFramesSizeBytes < config.frameStorageBytes)
+            && isFrameSuitableForCompletionLoop(result, data)
         ) {
+            savedFramesSizeBytes += getFrameSizeBytes(data)
             savedFrames.add(data)
         }
 
@@ -141,20 +178,20 @@ abstract class MLResultAggregator<DataFrame, ModelResult>(
     abstract fun isValidResult(result: ModelResult): Boolean
 
     /**
-     * Determine if a data frame should be saved for the final result
+     * Determine if a data frame should be saved for future processing
      */
-    abstract fun shouldSaveFrame(result: ModelResult, dataFrame: DataFrame): Boolean
+    abstract fun isFrameSuitableForCompletionLoop(result: ModelResult, frame: DataFrame): Boolean
 
     /**
      * Determine the size in memory that this data frame takes up
      */
-    abstract fun getFrameSizeBytes(dataFrame: DataFrame): Int
+    private fun getFrameSizeBytes(frame: DataFrame) = frame.sizeInBytes
 
     /**
      * Calculate the current rate at which the model is processing images. Notify the listener of
      * the result.
      */
-    private fun trackAndCalculateFrameRate() {
+    private fun trackAndNotifyOfFrameRate() {
         val nowNs = System.nanoTime()
 
         if (this.firstFrameTimeNs == null) {
@@ -168,19 +205,11 @@ abstract class MLResultAggregator<DataFrame, ModelResult>(
             val lastNotifyTimeNs = this.lastNotifyTimeNs ?: nowNs
             val firstFrameTimeNs = this.firstFrameTimeNs ?: nowNs
 
-            Log.d("AGW", "DURATION: ${(nowNs - lastNotifyTimeNs) / NANOS_IN_SECONDS}  RECENT FRAMES: $framesProcessedSinceLastUpdate")
+            val instFramesPerSecond =
+                calculateFrameRate(framesProcessedSinceLastUpdate, nowNs - lastNotifyTimeNs)
 
-            val instFramesPerSecond = if (nowNs > lastNotifyTimeNs) {
-                framesProcessedSinceLastUpdate.toDouble() * NANOS_IN_SECONDS / (nowNs - lastNotifyTimeNs)
-            } else {
-                0.0
-            }
-
-            val avgFramesPerSecond = if (nowNs > firstFrameTimeNs) {
-                totalFramesProcessed.toDouble() * NANOS_IN_SECONDS / (nowNs - firstFrameTimeNs)
-            } else {
-                0.0
-            }
+            val avgFramesPerSecond =
+                calculateFrameRate(totalFramesProcessed, nowNs - firstFrameTimeNs)
 
             framesProcessedSinceLastUpdate = 0
             this.lastNotifyTimeNs = nowNs
@@ -188,13 +217,29 @@ abstract class MLResultAggregator<DataFrame, ModelResult>(
         }
     }
 
+    /**
+     * Calculate the frame rate in frames / second.
+     *
+     * @param frames: the number of frames processed
+     * @param durationNs: how long these frames were tracked for in nanoseconds
+     */
+    private fun calculateFrameRate(frames: Long, durationNs: Long): Double =
+        if (durationNs > 0) {
+            frames.toDouble() * NANOS_IN_SECONDS / durationNs
+        } else {
+            0.0
+        }
+
     private fun shouldNotifyOfFrameRate(nowNs: Long): Boolean =
         nowNs - (lastNotifyTimeNs ?: 0) > config.frameRateUpdateIntervalNs
 
     /**
      * Send the listener the current frame rates on the main thread.
      */
-    private fun notifyOfFrameRate(avgFramesPerSecond: Double, instantaneousFramesPerSecond: Double) {
+    private fun notifyOfFrameRate(
+        avgFramesPerSecond: Double,
+        instantaneousFramesPerSecond: Double
+    ) {
         runOnMainThread(Runnable {
             listener.onUpdateProcessingRate(avgFramesPerSecond, instantaneousFramesPerSecond)
         })
@@ -203,15 +248,16 @@ abstract class MLResultAggregator<DataFrame, ModelResult>(
     /**
      * Send the listener the result from this model on the main thread.
      */
-    private fun notifyOfResult(result: ModelResult, dataFrames: List<DataFrame>) {
-        runOnMainThread(Runnable { listener.onResult(result, dataFrames) })
+    private fun notifyOfResult(result: ModelResult, frames: List<DataFrame>) {
+        stopListening()
+        runOnMainThread(Runnable { listener.onResult(result, frames) })
     }
 
     /**
      * Send the listener an interim result from this model on the main thread.
      */
-    private fun notifyOfInterimResult(result: ModelResult, dataFrame: DataFrame) {
-        runOnMainThread(Runnable { listener.onInterimResult(result, dataFrame) })
+    private fun notifyOfInterimResult(result: ModelResult, frame: DataFrame) {
+        runOnMainThread(Runnable { listener.onInterimResult(result, frame) })
     }
 
     /**
@@ -236,11 +282,11 @@ abstract class MLResultAggregator<DataFrame, ModelResult>(
  * The listener will be notified of a result once a threshold number of matching results is received
  * or the time since the first result exceeds a threshold.
  */
-abstract class MLCardResultAggregator<ImageFormat>(
-    config: MLResultAggregatorConfig,
-    listener: MLAggregateResultListener<ImageFormat, CardOcrResult>,
+abstract class CardOcrResultAggregator<ImageFormat : FixedMemorySize>(
+    config: ResultAggregatorConfig,
+    listener: AggregateResultListener<ImageFormat, CardOcrResult>,
     private val requiredAgreementCount: Int? = null
-) : MLResultAggregator<ImageFormat, CardOcrResult>(config, listener) {
+) : ResultAggregator<ImageFormat, CardOcrResult>(config, listener) {
 
     private val numberResults = mutableMapOf<CardNumber, Int>()
     private val expiryResults = mutableMapOf<CardExpiry, Int>()
@@ -282,17 +328,20 @@ abstract class MLCardResultAggregator<ImageFormat>(
         } else {
             0
         }
-
-    override fun isValidResult(result: CardOcrResult): Boolean = result.number != null
-
-    override fun shouldSaveFrame(result: CardOcrResult, dataFrame: ImageFormat): Boolean =
-        result.number != null
 }
 
-class MLCardImageResultAggregator(
-    config: MLResultAggregatorConfig,
-    listener: MLAggregateResultListener<CardImage, CardOcrResult>,
+class CardImageOcrResultAggregator(
+    config: ResultAggregatorConfig,
+    listener: AggregateResultListener<CardImage, CardOcrResult>,
     requiredAgreementCount: Int? = null
-) : MLCardResultAggregator<CardImage>(config, listener, requiredAgreementCount) {
-    override fun getFrameSizeBytes(dataFrame: CardImage): Int = dataFrame.image.limit()
+) : CardOcrResultAggregator<CardImage>(config, listener, requiredAgreementCount) {
+
+    override fun isValidResult(result: CardOcrResult): Boolean =
+        CreditCardUtils.isValidCardNumber(result.number?.number)
+
+    // TODO: This should store the least blurry images available
+    override fun isFrameSuitableForCompletionLoop(
+        result: CardOcrResult,
+        frame: CardImage
+    ): Boolean = result.number != null
 }

@@ -3,7 +3,9 @@ package com.getbouncer.cardscan.base.image
 import android.app.ActivityManager
 import android.content.Context
 import android.content.pm.ConfigurationInfo
-import android.graphics.*
+import android.graphics.Bitmap
+import android.graphics.Rect
+import android.graphics.RectF
 import android.util.Size
 import androidx.camera.core.ImageProxy
 import com.getbouncer.cardscan.base.domain.CardImage
@@ -27,9 +29,20 @@ fun ImageProxy.toBitmap(): Bitmap {
     return bitmap
 }
 
-fun Bitmap.toRGBAByteBuffer(): ByteBuffer {
-    //TODO: implement this
-    return ByteBuffer.allocateDirect(0)
+fun Bitmap.toRGBAByteBuffer(mean: Float = 0F, std: Float = 255F): ByteBuffer {
+    val rgba = IntArray(width * height).also {
+        getPixels(it, 0, width, 0, 0, width, height)
+    }
+
+    val rgbaFloat = ByteBuffer.allocateDirect(this.width * this.height * DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL)
+    rgbaFloat.order(ByteOrder.nativeOrder())
+    rgba.forEach {
+        rgbaFloat.putFloat(((it shr 16 and 0xFF) - mean) / std)
+        rgbaFloat.putFloat(((it shr 8 and 0xFF) - mean) / std)
+        rgbaFloat.putFloat(((it and 0xFF) - mean) / std)
+    }
+
+    return rgbaFloat
 }
 
 fun ImageProxy.toNV21ByteArray(): ByteArray {
@@ -51,26 +64,30 @@ fun ImageProxy.toNV21ByteArray(): ByteArray {
     return nv21
 }
 
-fun ImageProxy.toRGBAByteBuffer(): ByteBuffer {
+fun ImageProxy.toRGBAByteBuffer(mean: Float = 0F, std: Float = 255F): ByteBuffer {
     val nv21 = this.toNV21ByteArray()
 
-    val rgba = IntArray(this.width * this.height).also {
-        YUVDecoder.yuvToRGBA(nv21, this.width, this.height, it)
+    val rgba = IntArray(width * height).also {
+        YUVDecoder.yuvToRGBA(nv21, width, height, it)
     }
 
     val rgbaFloat = ByteBuffer.allocateDirect(this.width * this.height * DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL)
     rgbaFloat.order(ByteOrder.nativeOrder())
     rgba.forEach {
-        rgbaFloat.putFloat((it shr 16 and 0xFF) / 255F)
-        rgbaFloat.putFloat((it shr 8 and 0xFF) / 255F)
-        rgbaFloat.putFloat((it and 0xFF) / 255F)
+        rgbaFloat.putFloat(((it shr 16 and 0xFF) - mean) / std)
+        rgbaFloat.putFloat(((it shr 8 and 0xFF) - mean) / std)
+        rgbaFloat.putFloat(((it and 0xFF) - mean) / std)
     }
 
     return rgbaFloat
 }
 
 fun ImageProxy.toCardImage(rotationDegrees: Int): CardImage =
-    CardImage(this.toRGBAByteBuffer(), rotationDegrees, Size(this.width, this.height))
+    CardImage(
+        this.toRGBAByteBuffer(),
+        rotationDegrees,
+        Size(this.width, this.height)
+    )
 
 fun hasOpenGl31(context: Context): Boolean {
     val openGlVersion = 0x00030001
@@ -84,15 +101,15 @@ fun hasOpenGl31(context: Context): Boolean {
     }
 }
 
-fun ByteBuffer.rbgaToBitmap(size: Size): Bitmap {
+fun ByteBuffer.rbgaToBitmap(size: Size, mean: Float = 0F, std: Float = 255F): Bitmap {
     val bitmap = Bitmap.createBitmap(size.width, size.height, Bitmap.Config.ARGB_8888)
     val rgba = IntBuffer.allocate(size.width * size.height)
     while (this.hasRemaining()) {
         this.float.also {
             rgba.put(
-                ((it * 255F).toInt() shl 16)
-                + ((it * 255F).toInt() shl 8)
-                + ((it * 255F).toInt())
+                (((it * std) + mean).toInt() shl 16)
+                + (((it * std) + mean).toInt() shl 8)
+                + (((it * std) + mean).toInt())
             )
         }
     }

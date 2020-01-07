@@ -3,7 +3,6 @@ package com.getbouncer.cardscan.base.ml.models
 import android.content.Context
 import android.graphics.RectF
 import android.util.Size
-import android.util.TimingLogger
 import com.getbouncer.cardscan.base.R
 import com.getbouncer.cardscan.base.domain.DetectionBox
 import com.getbouncer.cardscan.base.image.hasOpenGl31
@@ -18,11 +17,14 @@ class FindFourModel(
     factory: MLResourceModelFactory,
     context: Context,
     private val originalImageSize: Size
-) : MLTFLResourceModel<ByteBuffer, FindFourModel.Prediction>(factory) {
+) : MLTFLResourceModel<ByteBuffer, FindFourModel.Prediction, Array<Array<Array<FloatArray>>>>(factory) {
+
+    override val logTag: String = "FIND_FOUR_MODEL"
+
+    override fun buildEmptyClassifiers(): Array<Array<Array<FloatArray>>> =
+        Array(1) { Array(ROWS) { Array(COLS) { FloatArray(CLASSES) } } }
 
     companion object {
-        private const val LOG_TAG = "FIND_FOUR_MODEL"
-
         const val ROWS = 34
         const val COLS = 51
 
@@ -41,25 +43,14 @@ class FindFourModel(
     }
 
     override val modelFileResource: Int = R.raw.findfour
-    override val supportsMultiThreading: Boolean = true
+    override val isThreadSafe: Boolean = true
     override val trainedImageSize: Size = Size(480, 302)
     override val tfOptions: Interpreter.Options = Interpreter
         .Options()
         .setUseNNAPI(USE_GPU && hasOpenGl31(context))
         .setNumThreads(NUM_THREADS)
 
-    override fun analyze(data: ByteBuffer): Prediction {
-        val classifiers = Array(1) { Array(ROWS) { Array(COLS) { FloatArray(CLASSES) } } }
-        val executionTimer = TimingLogger(LOG_TAG, "analyze")
-        tfInterpreter.run(data, classifiers)
-        executionTimer.addSplit("model_execution")
-        val prediction = interpretMLResults(classifiers)
-        executionTimer.addSplit("result_interpretation")
-        executionTimer.dumpToLog()
-        return prediction
-    }
-
-    private fun interpretMLResults(classifiers: Array<Array<Array<FloatArray>>>): Prediction {
+    override fun interpretClassifierResults(classifiers: Array<Array<Array<FloatArray>>>): Prediction {
         val digitBoxes = ArrayList<DetectionBox>()
         for (row in 0..ROWS) {
             for (col in 0..COLS) {

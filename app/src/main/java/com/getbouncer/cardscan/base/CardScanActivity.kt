@@ -9,22 +9,33 @@ import android.util.Log
 import android.util.Size
 import android.view.Surface
 import android.view.ViewGroup
-import androidx.camera.core.*
+import androidx.camera.core.CameraX
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageAnalysisConfig
+import androidx.camera.core.Preview
+import androidx.camera.core.PreviewConfig
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.getbouncer.cardscan.base.camera.CardImageAnalysisAdapter
 import com.getbouncer.cardscan.base.domain.CardImage
 import com.getbouncer.cardscan.base.domain.CardOcrResult
-import com.getbouncer.cardscan.base.ml.MLAggregateResultListener
-import com.getbouncer.cardscan.base.ml.MLCardImageResultAggregator
-import com.getbouncer.cardscan.base.ml.MLExecutorFactory
-import com.getbouncer.cardscan.base.ml.MLResultAggregatorConfig
-import com.getbouncer.cardscan.base.ml.models.MockCpuModel
-import kotlinx.android.synthetic.main.activity_main.*
+import com.getbouncer.cardscan.base.ml.AggregateResultListener
+import com.getbouncer.cardscan.base.ml.CardImageOcrResultAggregator
+import com.getbouncer.cardscan.base.ml.ResultAggregatorConfig
+import com.getbouncer.cardscan.base.ml.TerminatingImageAnalyzerLoop
+import com.getbouncer.cardscan.base.ml.models.MockCpuAnalyzer
+import kotlinx.android.synthetic.main.activity_main.framerate
+import kotlinx.android.synthetic.main.activity_main.text
+import kotlinx.android.synthetic.main.activity_main.texture
 import kotlin.math.round
 
 private const val CAMERA_PERMISSION_REQUEST = 1200
 
-class CardScanActivity : AppCompatActivity(), MLAggregateResultListener<CardImage, CardOcrResult> {
+class CardScanActivity : AppCompatActivity(), AggregateResultListener<CardImage, CardOcrResult> {
+
+    companion object {
+        private const val DEFAULT_FRAME_STORAGE_BYTES = 0x8000000 // 128MB
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,16 +63,21 @@ class CardScanActivity : AppCompatActivity(), MLAggregateResultListener<CardImag
     }
 
     private fun startCamera() {
-        val mlResultManagerConfig = MLResultAggregatorConfig.Builder().build()
-        val mlResultManager = MLCardImageResultAggregator(mlResultManagerConfig, this)
-        val mlModel = MockCpuModel(mlResultManager)
-        val mlExecutor = MLExecutorFactory(mlModel).getExecutor()
+        val resultAggregatorConfig = ResultAggregatorConfig.Builder().build()
+        val mainLoop = TerminatingImageAnalyzerLoop(
+            maximumFrameMemoryBytes = DEFAULT_FRAME_STORAGE_BYTES,
+            analyzer = MockCpuAnalyzer(),
+            resultHandler = CardImageOcrResultAggregator(resultAggregatorConfig, this)
+        )
+        val mainLoopAdapter = CardImageAnalysisAdapter(mainLoop)
+        mainLoop.runLoop()
 
         val imageAnalysisConfig = ImageAnalysisConfig.Builder()
             .setTargetRotation(Surface.ROTATION_0)
+            .setTargetResolution(Size(texture.width, texture.height))
             .build()
         val imageAnalysis = ImageAnalysis(imageAnalysisConfig)
-        imageAnalysis.setAnalyzer(mlExecutor, mlModel)
+        imageAnalysis.setAnalyzer(mainLoop.executor, mainLoopAdapter)
 
         val previewConfig: PreviewConfig = PreviewConfig.Builder()
             .setLensFacing(CameraX.LensFacing.BACK)
@@ -113,14 +129,19 @@ class CardScanActivity : AppCompatActivity(), MLAggregateResultListener<CardImag
         Log.i("FR", "FR: avg=$avgFramesPerSecond, inst=$instFramesPerSecond")
     }
 
-    override fun onResult(result: CardOcrResult, dataFrames: List<CardImage>) {
+    override fun onResult(result: CardOcrResult, frames: List<CardImage>) {
         val number = result.number
         val expiry = result.expiry
-        text.text = "${number?.number ?: "____"} - ${expiry?.day ?: "0"}/${expiry?.month ?: "0"}/${expiry?.year ?: "0"}"
-        Log.i("RESULT", "SCANNING ${number?.number ?: "____"} - ${expiry?.day ?: "0"}/${expiry?.month ?: "0"}/${expiry?.year ?: "0"}")
+        text.text = "${number?.number ?: "____"} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}"
+        Log.i("RESULT", "SCANNING ${number?.number ?: "____"} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}")
     }
 
-    override fun onInterimResult(result: CardOcrResult, dataFrame: CardImage) {
-        // Don't display anything on interim
+    override fun onInterimResult(result: CardOcrResult, frame: CardImage) {
+        val number = result.number
+        val expiry = result.expiry
+        if (number != null) {
+            text.text = "${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}"
+            Log.i("RESULT", "SCANNING ${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}")
+        }
     }
 }
