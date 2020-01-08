@@ -14,7 +14,7 @@ import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
  * images, this class adapts the images from the CameraX APIs to be enqueued in the loop
  */
 abstract class ImageAnalysisAdapter<ImageFormat : FixedMemorySize, Output>(
-    private val loop: MemoryBoundAnalyzerLoop<ImageFormat, Output>
+    private val loop: MemoryBoundAnalyzerLoop<ImageFormat>
 ) : ImageAnalysis.Analyzer {
 
     override fun analyze(image: ImageProxy, rotationDegrees: Int) {
@@ -24,7 +24,7 @@ abstract class ImageAnalysisAdapter<ImageFormat : FixedMemorySize, Output>(
     abstract fun convertImageFormat(image: ImageProxy, rotationDegrees: Int): ImageFormat
 }
 
-class CardImageAnalysisAdapter<Output>(loop: MemoryBoundAnalyzerLoop<CardImage, Output>)
+class CardImageAnalysisAdapter<Output>(loop: MemoryBoundAnalyzerLoop<CardImage>)
     : ImageAnalysisAdapter<CardImage, Output>(loop) {
 
     companion object {

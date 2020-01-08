@@ -21,20 +21,23 @@ import com.getbouncer.cardscan.base.domain.CardImage
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.ml.AggregateResultListener
 import com.getbouncer.cardscan.base.ml.CardImageOcrResultAggregator
+import com.getbouncer.cardscan.base.ml.CoroutineMemoryBoundAnalyzerLoop
+import com.getbouncer.cardscan.base.ml.Rate
 import com.getbouncer.cardscan.base.ml.ResultAggregatorConfig
-import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
 import com.getbouncer.cardscan.base.ml.models.MockCpuAnalyzer
-import kotlinx.android.synthetic.main.activity_main.framerate
-import kotlinx.android.synthetic.main.activity_main.text
-import kotlinx.android.synthetic.main.activity_main.texture
-import kotlin.math.round
+import kotlinx.android.synthetic.main.activity_main.*
+import java.util.concurrent.Executors
+import kotlin.time.Duration
+import kotlin.time.ExperimentalTime
+import kotlin.time.seconds
 
 private const val CAMERA_PERMISSION_REQUEST = 1200
 
+@ExperimentalTime
 class CardScanActivity : AppCompatActivity(), AggregateResultListener<CardImage, CardOcrResult> {
 
     companion object {
-        private const val DEFAULT_FRAME_STORAGE_BYTES = 0x8000000 // 128MB
+        private const val DEFAULT_FRAME_STORAGE_BYTES = 0x2000000 // 32MB
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,21 +66,24 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<CardImage,
     }
 
     private fun startCamera() {
-        val resultAggregatorConfig = ResultAggregatorConfig.Builder().build()
-        val mainLoop = MemoryBoundAnalyzerLoop(
-            maximumFrameMemoryBytes = DEFAULT_FRAME_STORAGE_BYTES,
+        val resultAggregatorConfig = ResultAggregatorConfig.Builder()
+            .withMaxTotalAggregationTime(10.seconds)
+            .withTrackFrameRate(true)
+            .build()
+        val mainLoop = CoroutineMemoryBoundAnalyzerLoop(
             analyzer = MockCpuAnalyzer(),
-            resultHandler = CardImageOcrResultAggregator(resultAggregatorConfig, this)
+            resultHandler = CardImageOcrResultAggregator(resultAggregatorConfig, this, requiredAgreementCount = 5)
+//            , maximumFrameMemoryBytes = DEFAULT_FRAME_STORAGE_BYTES
         )
-        val mainLoopAdapter = CardImageAnalysisAdapter(mainLoop)
-        mainLoop.runLoop()
+        val mainLoopAdapter = CardImageAnalysisAdapter<CardOcrResult>(mainLoop)
+        mainLoop.start()
 
         val imageAnalysisConfig = ImageAnalysisConfig.Builder()
             .setTargetRotation(Surface.ROTATION_0)
-            .setTargetResolution(Size(texture.width, texture.height))
+//            .setTargetResolution(Size(texture.width, texture.height))
             .build()
         val imageAnalysis = ImageAnalysis(imageAnalysisConfig)
-        imageAnalysis.setAnalyzer(mainLoop.executor, mainLoopAdapter)
+        imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), mainLoopAdapter)
 
         val previewConfig: PreviewConfig = PreviewConfig.Builder()
             .setLensFacing(CameraX.LensFacing.BACK)
@@ -124,11 +130,6 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<CardImage,
         updateTransform()
     }
 
-    override fun onUpdateProcessingRate(avgFramesPerSecond: Double, instFramesPerSecond: Double) {
-        framerate.text = "FR: avg=${round(avgFramesPerSecond)}, inst=${round(instFramesPerSecond)}"
-        Log.i("FR", "FR: avg=$avgFramesPerSecond, inst=$instFramesPerSecond")
-    }
-
     override fun onResult(result: CardOcrResult, frames: List<CardImage>) {
         val number = result.number
         val expiry = result.expiry
@@ -143,5 +144,21 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<CardImage,
             text.text = "${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}"
             Log.i("RESULT", "SCANNING ${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}")
         }
+    }
+
+    override fun onUpdateProcessingRate(overallRate: Rate, instantRate: Rate) {
+        val overallFps = if (overallRate.duration != Duration.ZERO) {
+            overallRate.amount / overallRate.duration.inSeconds
+        } else {
+            0.0
+        }
+
+        val instantFps = if (instantRate.duration != Duration.ZERO) {
+            instantRate.amount / instantRate.duration.inSeconds
+        } else {
+            0.0
+        }
+
+        framerate.text = "FR: avg=$overallFps, inst=$instantFps"
     }
 }

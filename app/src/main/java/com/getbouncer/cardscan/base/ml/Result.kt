@@ -8,6 +8,11 @@ import com.getbouncer.cardscan.base.domain.CardNumber
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.domain.FixedMemorySize
 import com.getbouncer.cardscan.base.util.CreditCardUtils
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.time.Duration
+import kotlin.time.ExperimentalTime
+import kotlin.time.nanoseconds
+import kotlin.time.seconds
 
 /**
  * A result handler for data processing. This is called when results are available from an
@@ -17,6 +22,10 @@ interface ResultHandler<Input, Output> {
     fun onResult(result: Output, data: Input)
 }
 
+@ExperimentalTime
+data class Rate(val amount: Long, val duration: Duration)
+
+@ExperimentalTime
 interface AggregateResultListener<DataFrame : FixedMemorySize, ModelResult> {
 
     /**
@@ -39,10 +48,10 @@ interface AggregateResultListener<DataFrame : FixedMemorySize, ModelResult> {
     /**
      * The processing rate has been updated. This is useful for debugging and measuring performance.
      *
-     * @param avgFramesPerSecond: The average frame rate at which the model is running
-     * @param instFramesPerSecond: The instantaneous frame rate at which the model is running
+     * @param overallRate: The total frame rate at which the analyzer is running
+     * @param instantRate: The instantaneous frame rate at which the analyzer is running
      */
-    fun onUpdateProcessingRate(avgFramesPerSecond: Double, instFramesPerSecond: Double)
+    fun onUpdateProcessingRate(overallRate: Rate, instantRate: Rate)
 }
 
 /**
@@ -58,79 +67,82 @@ abstract class FinishingResultHandler<Input, Output> : ResultHandler<Input, Outp
     }
 }
 
+@ExperimentalTime
 data class ResultAggregatorConfig(
-    val maxTotalAggregationTimeNs: Long,
+    val maxTotalAggregationTime: Duration,
     val maxSavedFrames: Int,
     val frameStorageBytes: Int,
     val trackFrameRate: Boolean,
-    val frameRateUpdateIntervalNs: Long
+    val frameRateUpdateInterval: Duration
 ) {
 
     class Builder {
         companion object {
-            private const val DEFAULT_MAX_TOTAL_AGGREGATION_TIME_NS = 1500000000L // 1.5 seconds
+            private val DEFAULT_MAX_TOTAL_AGGREGATION_TIME = 1.5.seconds
             private const val DEFAULT_MAX_OBJECT_DETECTION_FRAMES = -1  // Unlimited saved frames
             private const val DEFAULT_FRAME_STORAGE_BYTES = 0x4000000 // 64MB
             private const val DEFAULT_TRACK_FRAME_RATE = false
-            private const val DEFAULT_FRAME_RATE_UPDATE_INTERVAL_NS = 1000000000L // 1 second
+            private val DEFAULT_FRAME_RATE_UPDATE_INTERVAL = 1.seconds
         }
 
-        private var maxTotalAggregationTimeNs: Long =
-            DEFAULT_MAX_TOTAL_AGGREGATION_TIME_NS
+        private var maxTotalAggregationTime: Duration =
+            DEFAULT_MAX_TOTAL_AGGREGATION_TIME
         private var maxSavedFrames: Int =
             DEFAULT_MAX_OBJECT_DETECTION_FRAMES
-        private var frameRateUpdateIntervalNs: Long =
-            DEFAULT_FRAME_RATE_UPDATE_INTERVAL_NS
         private var frameStorageBytes: Int =
             DEFAULT_FRAME_STORAGE_BYTES
         private var trackFrameRate: Boolean =
             DEFAULT_TRACK_FRAME_RATE
+        private var frameRateUpdateInterval: Duration =
+            DEFAULT_FRAME_RATE_UPDATE_INTERVAL
 
-        fun withMaxTotalAggregationTimeNs(maxTotalAggregationTimeNs: Long) {
-            this.maxTotalAggregationTimeNs = maxTotalAggregationTimeNs
+        fun withMaxTotalAggregationTime(maxTotalAggregationTime: Duration): Builder {
+            this.maxTotalAggregationTime = maxTotalAggregationTime
+            return this
         }
 
-        fun withMaxSavedFrames(maxSavedFrames: Int) {
+        fun withMaxSavedFrames(maxSavedFrames: Int): Builder {
             this.maxSavedFrames = maxSavedFrames
+            return this
         }
 
-        fun withFrameRateUpdateIntervalNs(frameRateUpdateIntervalNs: Long) {
-            this.frameRateUpdateIntervalNs = frameRateUpdateIntervalNs
+        fun withFrameRateUpdateInterval(frameRateUpdateInterval: Duration): Builder {
+            this.frameRateUpdateInterval = frameRateUpdateInterval
+            return this
         }
 
-        fun withFrameStorageBytes(frameStorageBytes: Int) {
+        fun withFrameStorageBytes(frameStorageBytes: Int): Builder {
             this.frameStorageBytes = frameStorageBytes
+            return this
         }
 
-        fun withTrackFrameRate(trackFrameRate: Boolean) {
+        fun withTrackFrameRate(trackFrameRate: Boolean): Builder {
             this.trackFrameRate = trackFrameRate
+            return this
         }
 
         fun build() =
             ResultAggregatorConfig(
-                maxTotalAggregationTimeNs,
+                maxTotalAggregationTime,
                 maxSavedFrames,
                 frameStorageBytes,
                 trackFrameRate,
-                frameRateUpdateIntervalNs
+                frameRateUpdateInterval
             )
     }
 }
 
+@ExperimentalTime
 abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
     private val config: ResultAggregatorConfig,
     private val listener: AggregateResultListener<DataFrame, ModelResult>
 ) : FinishingResultHandler<DataFrame, ModelResult>() {
 
-    companion object {
-        private const val NANOS_IN_SECONDS = 1000000000
-    }
-
-    private var firstResultTimeNs: Long? = null
-    private var firstFrameTimeNs: Long? = null
-    private var lastNotifyTimeNs: Long? = null
-    private var totalFramesProcessed: Long = 0
-    private var framesProcessedSinceLastUpdate: Long = 0
+    private var firstResultTime: Duration? = null
+    private var firstFrameTime: Duration? = null
+    private var lastNotifyTime: Duration? = null
+    private var totalFramesProcessed: AtomicLong = AtomicLong(0)
+    private var framesProcessedSinceLastUpdate: AtomicLong = AtomicLong(0)
     private var savedFramesSizeBytes: Long = 0
 
     private val savedFrames = mutableListOf<DataFrame>()
@@ -144,19 +156,22 @@ abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
             trackAndNotifyOfFrameRate()
         }
 
-        if (isValidResult(result) && firstResultTimeNs == null) {
-            firstResultTimeNs = System.nanoTime()
+        val validResult = isValidResult(result)
+        if (validResult && firstResultTime == null) {
+            firstResultTime = System.nanoTime().nanoseconds
         }
 
         if ((config.maxSavedFrames < 0 || savedFrames.size < config.maxSavedFrames)
             && (config.frameStorageBytes < 0 || savedFramesSizeBytes < config.frameStorageBytes)
-            && isFrameSuitableForCompletionLoop(result, data)
+            && shouldSaveFrame(result, data)
         ) {
             savedFramesSizeBytes += getFrameSizeBytes(data)
             savedFrames.add(data)
         }
 
-        notifyOfInterimResult(result, data)
+        if (validResult) {
+            notifyOfInterimResult(result, data)
+        }
 
         val finalResult = aggregateResult(result, hasReachedTimeout())
         if (finalResult != null) {
@@ -165,7 +180,7 @@ abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
     }
 
     /**
-     * Aggregate a new result.
+     * Aggregate a new result. Note that the [result] may be invalid.
      *
      * @param result: The result to aggregate
      * @param mustReturn: If true, this method must return a final result
@@ -173,14 +188,15 @@ abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
     abstract fun aggregateResult(result: ModelResult, mustReturn: Boolean): ModelResult?
 
     /**
-     * Determine if a result is valid for tracking purposes
+     * Determine if a result is valid for tracking purposes.
      */
     abstract fun isValidResult(result: ModelResult): Boolean
 
     /**
-     * Determine if a data frame should be saved for future processing
+     * Determine if a data frame should be saved for future processing. Note that [result] may be
+     * invalid.
      */
-    abstract fun isFrameSuitableForCompletionLoop(result: ModelResult, frame: DataFrame): Boolean
+    abstract fun shouldSaveFrame(result: ModelResult, frame: DataFrame): Boolean
 
     /**
      * Determine the size in memory that this data frame takes up
@@ -192,56 +208,43 @@ abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
      * the result.
      */
     private fun trackAndNotifyOfFrameRate() {
-        val nowNs = System.nanoTime()
+        val now = System.nanoTime().nanoseconds
 
-        if (this.firstFrameTimeNs == null) {
-            this.firstFrameTimeNs = nowNs
-        }
+        val totalFrames = totalFramesProcessed.incrementAndGet()
+        val framesSinceLastUpdate = framesProcessedSinceLastUpdate.incrementAndGet()
 
-        totalFramesProcessed++
-        framesProcessedSinceLastUpdate++
+        if (shouldNotifyOfFrameRate(now)) {
+            val lastNotifyTime = this.lastNotifyTime
+            val firstFrameTime = this.firstFrameTime
 
-        if (shouldNotifyOfFrameRate(nowNs)) {
-            val lastNotifyTimeNs = this.lastNotifyTimeNs ?: nowNs
-            val firstFrameTimeNs = this.firstFrameTimeNs ?: nowNs
+            if (lastNotifyTime != null && firstFrameTime != null) {
+                val totalFrameRate =
+                    Rate(totalFrames, now - firstFrameTime)
 
-            val instFramesPerSecond =
-                calculateFrameRate(framesProcessedSinceLastUpdate, nowNs - lastNotifyTimeNs)
+                val instantFrameRate =
+                    Rate(framesSinceLastUpdate, now - lastNotifyTime)
 
-            val avgFramesPerSecond =
-                calculateFrameRate(totalFramesProcessed, nowNs - firstFrameTimeNs)
+                notifyOfFrameRate(totalFrameRate, instantFrameRate)
+            }
 
-            framesProcessedSinceLastUpdate = 0
-            this.lastNotifyTimeNs = nowNs
-            notifyOfFrameRate(avgFramesPerSecond, instFramesPerSecond)
+            framesProcessedSinceLastUpdate.set(0)
+            this.lastNotifyTime = now
+
+            if (this.firstFrameTime == null) {
+                this.firstFrameTime = now
+            }
         }
     }
 
-    /**
-     * Calculate the frame rate in frames / second.
-     *
-     * @param frames: the number of frames processed
-     * @param durationNs: how long these frames were tracked for in nanoseconds
-     */
-    private fun calculateFrameRate(frames: Long, durationNs: Long): Double =
-        if (durationNs > 0) {
-            frames.toDouble() * NANOS_IN_SECONDS / durationNs
-        } else {
-            0.0
-        }
-
-    private fun shouldNotifyOfFrameRate(nowNs: Long): Boolean =
-        nowNs - (lastNotifyTimeNs ?: 0) > config.frameRateUpdateIntervalNs
+    private fun shouldNotifyOfFrameRate(now: Duration) =
+        now - (lastNotifyTime ?: Duration.ZERO) > config.frameRateUpdateInterval
 
     /**
      * Send the listener the current frame rates on the main thread.
      */
-    private fun notifyOfFrameRate(
-        avgFramesPerSecond: Double,
-        instantaneousFramesPerSecond: Double
-    ) {
+    private fun notifyOfFrameRate(overallRate: Rate, instantRate: Rate) {
         runOnMainThread(Runnable {
-            listener.onUpdateProcessingRate(avgFramesPerSecond, instantaneousFramesPerSecond)
+            listener.onUpdateProcessingRate(overallRate, instantRate)
         })
     }
 
@@ -264,9 +267,9 @@ abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
      * Determine if the timeout from the config has been reached
      */
     private fun hasReachedTimeout(): Boolean {
-        val firstResultTimeNs = this.firstResultTimeNs
-        return firstResultTimeNs != null &&
-                System.currentTimeMillis() - firstResultTimeNs > config.maxTotalAggregationTimeNs
+        val firstResultTime = this.firstResultTime
+        return firstResultTime != null &&
+                System.nanoTime().nanoseconds - firstResultTime > config.maxTotalAggregationTime
     }
 
     private fun runOnMainThread(runnable: Runnable) {
@@ -282,6 +285,7 @@ abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
  * The listener will be notified of a result once a threshold number of matching results is received
  * or the time since the first result exceeds a threshold.
  */
+@ExperimentalTime
 abstract class CardOcrResultAggregator<ImageFormat : FixedMemorySize>(
     config: ResultAggregatorConfig,
     listener: AggregateResultListener<ImageFormat, CardOcrResult>,
@@ -330,6 +334,7 @@ abstract class CardOcrResultAggregator<ImageFormat : FixedMemorySize>(
         }
 }
 
+@ExperimentalTime
 class CardImageOcrResultAggregator(
     config: ResultAggregatorConfig,
     listener: AggregateResultListener<CardImage, CardOcrResult>,
@@ -340,8 +345,8 @@ class CardImageOcrResultAggregator(
         CreditCardUtils.isValidCardNumber(result.number?.number)
 
     // TODO: This should store the least blurry images available
-    override fun isFrameSuitableForCompletionLoop(
+    override fun shouldSaveFrame(
         result: CardOcrResult,
         frame: CardImage
-    ): Boolean = result.number != null
+    ): Boolean = isValidResult(result)
 }

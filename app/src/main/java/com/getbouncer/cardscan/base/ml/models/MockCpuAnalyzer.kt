@@ -15,8 +15,9 @@ class MockCpuAnalyzer : Analyzer<CardImage, CardOcrResult> {
     override fun analyze(data: CardImage): CardOcrResult {
         // Simulate analyzing a credit card
 
-        return if (Random.nextInt(200) == 1) {
-            CardOcrResult(CardNumber("1234 5678 9012 3456"), CardExpiry(1, 2, 23))
+        Thread.sleep(300)
+        return if (Random.nextInt(4) == 1) {
+            CardOcrResult(CardNumber("4847 1860 9511 8770"), CardExpiry(1, 2, 23))
         } else {
             CardOcrResult(null, null)
         }
