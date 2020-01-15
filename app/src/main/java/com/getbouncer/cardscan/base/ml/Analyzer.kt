@@ -1,6 +1,5 @@
 package com.getbouncer.cardscan.base.ml
 
-import com.getbouncer.cardscan.base.domain.FixedMemorySize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,15 +36,16 @@ abstract class AnalyzerLoop<DataFrame, Output>(
 ) : CoroutineScope by CoroutineScope(Dispatchers.Default) {
 
     companion object {
-        private const val DEFAULT_COROUTINE_COUNT = 100
+        private const val DEFAULT_COROUTINE_COUNT = 1000
     }
 
     private val started: AtomicBoolean = AtomicBoolean(false)
-    private val frames: Channel<DataFrame> = Channel()
+    private val frames: Channel<DataFrame> = Channel(5)
 
     @ExperimentalCoroutinesApi
     fun enqueueFrame(frame: DataFrame) = if (!frames.isClosedForSend) frames.offer(frame) else false
 
+    @ExperimentalCoroutinesApi
     fun hasMoreFrames() = !frames.isEmpty
 
     fun start() {
@@ -88,7 +88,7 @@ abstract class AnalyzerLoop<DataFrame, Output>(
  *
  * Any data enqueued via [enqueueFrame] will be dropped once this loop has terminated.
  */
-class MemoryBoundAnalyzerLoop<DataFrame : FixedMemorySize, Output>(
+class MemoryBoundAnalyzerLoop<DataFrame, Output>(
     analyzer: Analyzer<DataFrame, Output>,
     private val resultHandler: FinishingResultHandler<DataFrame, Output>
 ) : AnalyzerLoop<DataFrame, Output>(analyzer, resultHandler) {
@@ -101,7 +101,7 @@ class MemoryBoundAnalyzerLoop<DataFrame : FixedMemorySize, Output>(
  * processed in the order provided.
  */
 @ExperimentalCoroutinesApi
-class FiniteAnalyzerLoop<DataFrame : FixedMemorySize, Output>(
+class FiniteAnalyzerLoop<DataFrame, Output>(
     frames: Collection<DataFrame>,
     analyzer: Analyzer<DataFrame, Output>,
     resultHandler: ResultHandler<DataFrame, Output>

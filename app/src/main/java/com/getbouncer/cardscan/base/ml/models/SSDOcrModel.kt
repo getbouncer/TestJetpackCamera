@@ -1,12 +1,12 @@
 package com.getbouncer.cardscan.base.ml.models
 
-import android.content.Context
-import android.graphics.Rect
-import com.getbouncer.cardscan.base.domain.CardImage
+import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.domain.CardOcrResult
-import com.getbouncer.cardscan.base.image.crop
+import com.getbouncer.cardscan.base.image.toRGBByteBuffer
 import com.getbouncer.cardscan.base.ml.Analyzer
 import com.getbouncer.cardscan.base.ml.MLResourceModelFactory
+import com.getbouncer.cardscan.base.util.Timer
+import kotlin.time.ExperimentalTime
 
 /**
  * This is actually an aggregating model. While not a model itself, it makes use of other models
@@ -21,18 +21,24 @@ import com.getbouncer.cardscan.base.ml.MLResourceModelFactory
  *                  the preview image.
  * - resultHandler: A handler for the result. Usually this is the main activity.
  */
+@ExperimentalTime
 class SSDOcrModel(
-    private val factory: MLResourceModelFactory,
-    private val context: Context,
-    private val cardRect: Rect
-) : Analyzer<CardImage, CardOcrResult> {
+    private val factory: MLResourceModelFactory
+) : Analyzer<ScanImage, CardOcrResult> {
+
+    companion object {
+        private const val IMAGE_MEAN = 127.5f
+        private const val IMAGE_STD = 128.5f
+    }
 
     override val isThreadSafe: Boolean = true
 
-    override fun analyze(data: CardImage): CardOcrResult {
-        val croppedImage = data.image.crop(data.size, cardRect)
+    private val loggingTimer = Timer.newInstance("Bouncer", "OCR Analysis")
+
+    override fun analyze(data: ScanImage): CardOcrResult = loggingTimer.measure {
+        val imageBytes = data.ocrImage.toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD)
 
         // TODO: implement OCR using the new model
-        return CardOcrResult(null, null)
+        CardOcrResult(null, null)
     }
 }

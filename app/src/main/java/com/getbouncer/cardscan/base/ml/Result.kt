@@ -3,15 +3,17 @@ package com.getbouncer.cardscan.base.ml
 import android.os.Handler
 import android.os.Looper
 import com.getbouncer.cardscan.base.domain.CardExpiry
-import com.getbouncer.cardscan.base.domain.CardImage
+import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.domain.CardNumber
 import com.getbouncer.cardscan.base.domain.CardOcrResult
-import com.getbouncer.cardscan.base.domain.FixedMemorySize
 import com.getbouncer.cardscan.base.util.CreditCardUtils
+import java.util.LinkedList
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.max
+import kotlin.time.ClockMark
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
-import kotlin.time.nanoseconds
+import kotlin.time.MonoClock
 import kotlin.time.seconds
 
 /**
@@ -26,7 +28,7 @@ interface ResultHandler<Input, Output> {
 data class Rate(val amount: Long, val duration: Duration)
 
 @ExperimentalTime
-interface AggregateResultListener<DataFrame : FixedMemorySize, ModelResult> {
+interface AggregateResultListener<DataFrame, ModelResult> {
 
     /**
      * The aggregated result of a model is available.
@@ -34,7 +36,7 @@ interface AggregateResultListener<DataFrame : FixedMemorySize, ModelResult> {
      * @param result: the card result from the model
      * @param frames: data frames captured during processing that can be used in the completion loop
      */
-    fun onResult(result: ModelResult, frames: List<DataFrame>)
+    fun onResult(result: ModelResult, frames: Map<String, List<DataFrame>>)
 
     /**
      * An interim result is available, but the model is still processing more data frames. This is
@@ -70,8 +72,10 @@ abstract class FinishingResultHandler<Input, Output> : ResultHandler<Input, Outp
 @ExperimentalTime
 data class ResultAggregatorConfig(
     val maxTotalAggregationTime: Duration,
-    val maxSavedFrames: Int,
-    val frameStorageBytes: Int,
+    val maxSavedFrames: Map<String, Int>,
+    val defaultMaxSavedFrames: Int,
+    val frameStorageBytes: Map<String, Int>,
+    val defaultFrameStorageBytes: Int,
     val trackFrameRate: Boolean,
     val frameRateUpdateInterval: Duration
 ) {
@@ -79,30 +83,37 @@ data class ResultAggregatorConfig(
     class Builder {
         companion object {
             private val DEFAULT_MAX_TOTAL_AGGREGATION_TIME = 1.5.seconds
-            private const val DEFAULT_MAX_OBJECT_DETECTION_FRAMES = -1  // Unlimited saved frames
+            private const val DEFAULT_MAX_SAVED_FRAMES = -1  // Unlimited saved frames
             private const val DEFAULT_FRAME_STORAGE_BYTES = 0x4000000 // 64MB
             private const val DEFAULT_TRACK_FRAME_RATE = false
             private val DEFAULT_FRAME_RATE_UPDATE_INTERVAL = 1.seconds
         }
 
-        private var maxTotalAggregationTime: Duration =
-            DEFAULT_MAX_TOTAL_AGGREGATION_TIME
-        private var maxSavedFrames: Int =
-            DEFAULT_MAX_OBJECT_DETECTION_FRAMES
-        private var frameStorageBytes: Int =
-            DEFAULT_FRAME_STORAGE_BYTES
-        private var trackFrameRate: Boolean =
-            DEFAULT_TRACK_FRAME_RATE
-        private var frameRateUpdateInterval: Duration =
-            DEFAULT_FRAME_RATE_UPDATE_INTERVAL
+        private var maxTotalAggregationTime: Duration = DEFAULT_MAX_TOTAL_AGGREGATION_TIME
+        private var maxSavedFrames: MutableMap<String, Int> = mutableMapOf()
+        private var defaultMaxSavedFrames: Int = DEFAULT_MAX_SAVED_FRAMES
+        private var frameStorageBytes: MutableMap<String, Int> = mutableMapOf()
+        private var defaultFrameStorageBytes: Int = DEFAULT_FRAME_STORAGE_BYTES
+        private var trackFrameRate: Boolean = DEFAULT_TRACK_FRAME_RATE
+        private var frameRateUpdateInterval: Duration = DEFAULT_FRAME_RATE_UPDATE_INTERVAL
 
         fun withMaxTotalAggregationTime(maxTotalAggregationTime: Duration): Builder {
             this.maxTotalAggregationTime = maxTotalAggregationTime
             return this
         }
 
-        fun withMaxSavedFrames(maxSavedFrames: Int): Builder {
-            this.maxSavedFrames = maxSavedFrames
+        fun withMaxSavedFrames(maxSavedFrames: Map<String, Int>): Builder {
+            this.maxSavedFrames = maxSavedFrames.toMutableMap()
+            return this
+        }
+
+        fun withMaxSavedFrames(frameType: String, maxSavedFrames: Int): Builder {
+            this.maxSavedFrames[frameType] = maxSavedFrames
+            return this
+        }
+
+        fun withDefaultMaxSavedFrames(defaultMaxSavedFrames: Int): Builder {
+            this.defaultMaxSavedFrames = defaultMaxSavedFrames
             return this
         }
 
@@ -111,8 +122,18 @@ data class ResultAggregatorConfig(
             return this
         }
 
-        fun withFrameStorageBytes(frameStorageBytes: Int): Builder {
-            this.frameStorageBytes = frameStorageBytes
+        fun withFrameStorageBytes(frameStorageBytes: Map<String, Int>): Builder {
+            this.frameStorageBytes = frameStorageBytes.toMutableMap()
+            return this
+        }
+
+        fun withFrameStorageBytes(frameType: String, frameStorageBytes: Int): Builder {
+            this.frameStorageBytes[frameType] = frameStorageBytes
+            return this
+        }
+
+        fun withDefaultFrameStorageBytes(defaultFrameStorageBytes: Int): Builder {
+            this.defaultFrameStorageBytes = defaultFrameStorageBytes
             return this
         }
 
@@ -125,7 +146,9 @@ data class ResultAggregatorConfig(
             ResultAggregatorConfig(
                 maxTotalAggregationTime,
                 maxSavedFrames,
+                defaultMaxSavedFrames,
                 frameStorageBytes,
+                defaultFrameStorageBytes,
                 trackFrameRate,
                 frameRateUpdateInterval
             )
@@ -133,19 +156,19 @@ data class ResultAggregatorConfig(
 }
 
 @ExperimentalTime
-abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
+abstract class ResultAggregator<DataFrame, ModelResult>(
     private val config: ResultAggregatorConfig,
     private val listener: AggregateResultListener<DataFrame, ModelResult>
 ) : FinishingResultHandler<DataFrame, ModelResult>() {
 
-    private var firstResultTime: Duration? = null
-    private var firstFrameTime: Duration? = null
-    private var lastNotifyTime: Duration? = null
+    private var firstResultTime: ClockMark? = null
+    private var firstFrameTime: ClockMark? = null
+    private var lastNotifyTime: ClockMark = MonoClock.markNow()
     private var totalFramesProcessed: AtomicLong = AtomicLong(0)
     private var framesProcessedSinceLastUpdate: AtomicLong = AtomicLong(0)
-    private var savedFramesSizeBytes: Long = 0
 
-    private val savedFrames = mutableListOf<DataFrame>()
+    private val savedFrames = mutableMapOf<String, LinkedList<DataFrame>>()
+    private val savedFramesSizeBytes = mutableMapOf<String, Int>()
 
     override fun onResult(result: ModelResult, data: DataFrame) {
         if (!isListening()) {
@@ -158,16 +181,10 @@ abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
 
         val validResult = isValidResult(result)
         if (validResult && firstResultTime == null) {
-            firstResultTime = System.nanoTime().nanoseconds
+            firstResultTime = MonoClock.markNow()
         }
 
-        if ((config.maxSavedFrames < 0 || savedFrames.size < config.maxSavedFrames)
-            && (config.frameStorageBytes < 0 || savedFramesSizeBytes < config.frameStorageBytes)
-            && shouldSaveFrame(result, data)
-        ) {
-            savedFramesSizeBytes += getFrameSizeBytes(data)
-            savedFrames.add(data)
-        }
+        saveFrames(result, data)
 
         if (validResult) {
             notifyOfInterimResult(result, data)
@@ -176,6 +193,37 @@ abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
         val finalResult = aggregateResult(result, hasReachedTimeout())
         if (finalResult != null) {
             notifyOfResult(finalResult, savedFrames)
+        }
+    }
+
+    @Synchronized
+    fun saveFrames(result: ModelResult, data: DataFrame) {
+        val savedFrameType = getSaveFrameIdentifier(result, data)
+        val typedSavedFrames = savedFrames[savedFrameType] ?: LinkedList()
+
+        if (savedFrameType != null) {
+            val maxSavedFrames = config.maxSavedFrames[savedFrameType] ?: config.defaultMaxSavedFrames
+            val storageBytes = config.frameStorageBytes[savedFrameType] ?: config.defaultFrameStorageBytes
+
+            var typedSizeBytes = savedFramesSizeBytes[savedFrameType] ?: 0 + getFrameSizeBytes(data)
+            while (storageBytes in 0 until typedSizeBytes) {
+                // saved frames is over storage limit, reduce until it's not
+                if (typedSavedFrames.size > 0) {
+                    val removedFrame = typedSavedFrames.removeFirst()
+                    typedSizeBytes -= getFrameSizeBytes(removedFrame)
+                } else {
+                    typedSizeBytes = 0
+                }
+            }
+
+            while (maxSavedFrames >= 0 && typedSavedFrames.size > maxSavedFrames) {
+                // saved frames is over size limit, reduce until it's not
+                val removedFrame = typedSavedFrames.removeFirst()
+                typedSizeBytes = max(0, typedSizeBytes - getFrameSizeBytes(removedFrame))
+            }
+
+            savedFramesSizeBytes[savedFrameType] = typedSizeBytes
+            typedSavedFrames.add(data)
         }
     }
 
@@ -195,49 +243,49 @@ abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
     /**
      * Determine if a data frame should be saved for future processing. Note that [result] may be
      * invalid.
+     *
+     * If this method returns a non-null string, the frame will be saved under that identifier.
      */
-    abstract fun shouldSaveFrame(result: ModelResult, frame: DataFrame): Boolean
+    abstract fun getSaveFrameIdentifier(result: ModelResult, frame: DataFrame): String?
 
     /**
      * Determine the size in memory that this data frame takes up
      */
-    private fun getFrameSizeBytes(frame: DataFrame) = frame.sizeInBytes
+    abstract fun getFrameSizeBytes(frame: DataFrame): Int
 
     /**
      * Calculate the current rate at which the model is processing images. Notify the listener of
      * the result.
      */
     private fun trackAndNotifyOfFrameRate() {
-        val now = System.nanoTime().nanoseconds
-
         val totalFrames = totalFramesProcessed.incrementAndGet()
         val framesSinceLastUpdate = framesProcessedSinceLastUpdate.incrementAndGet()
 
-        if (shouldNotifyOfFrameRate(now)) {
+        if (shouldNotifyOfFrameRate()) {
             val lastNotifyTime = this.lastNotifyTime
             val firstFrameTime = this.firstFrameTime
 
-            if (lastNotifyTime != null && firstFrameTime != null) {
+            if (firstFrameTime != null) {
                 val totalFrameRate =
-                    Rate(totalFrames, now - firstFrameTime)
+                    Rate(totalFrames, firstFrameTime.elapsedNow())
 
                 val instantFrameRate =
-                    Rate(framesSinceLastUpdate, now - lastNotifyTime)
+                    Rate(framesSinceLastUpdate, lastNotifyTime.elapsedNow())
 
                 notifyOfFrameRate(totalFrameRate, instantFrameRate)
             }
 
             framesProcessedSinceLastUpdate.set(0)
-            this.lastNotifyTime = now
+            this.lastNotifyTime = MonoClock.markNow()
 
             if (this.firstFrameTime == null) {
-                this.firstFrameTime = now
+                this.firstFrameTime = MonoClock.markNow()
             }
         }
     }
 
-    private fun shouldNotifyOfFrameRate(now: Duration) =
-        now - (lastNotifyTime ?: Duration.ZERO) > config.frameRateUpdateInterval
+    private fun shouldNotifyOfFrameRate() =
+        lastNotifyTime.elapsedNow() > config.frameRateUpdateInterval
 
     /**
      * Send the listener the current frame rates on the main thread.
@@ -251,7 +299,7 @@ abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
     /**
      * Send the listener the result from this model on the main thread.
      */
-    private fun notifyOfResult(result: ModelResult, frames: List<DataFrame>) {
+    private fun notifyOfResult(result: ModelResult, frames: Map<String, List<DataFrame>>) {
         stopListening()
         runOnMainThread(Runnable { listener.onResult(result, frames) })
     }
@@ -269,13 +317,10 @@ abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
     private fun hasReachedTimeout(): Boolean {
         val firstResultTime = this.firstResultTime
         return firstResultTime != null &&
-                System.nanoTime().nanoseconds - firstResultTime > config.maxTotalAggregationTime
+                firstResultTime.elapsedNow() > config.maxTotalAggregationTime
     }
 
-    private fun runOnMainThread(runnable: Runnable) {
-        val handler = Handler(Looper.getMainLooper())
-        handler.post(runnable)
-    }
+    private fun runOnMainThread(runnable: Runnable) = Handler(Looper.getMainLooper()).post(runnable)
 }
 
 /**
@@ -286,7 +331,7 @@ abstract class ResultAggregator<DataFrame : FixedMemorySize, ModelResult>(
  * or the time since the first result exceeds a threshold.
  */
 @ExperimentalTime
-abstract class CardOcrResultAggregator<ImageFormat : FixedMemorySize>(
+abstract class CardOcrResultAggregator<ImageFormat>(
     config: ResultAggregatorConfig,
     listener: AggregateResultListener<ImageFormat, CardOcrResult>,
     private val requiredAgreementCount: Int? = null
@@ -337,16 +382,25 @@ abstract class CardOcrResultAggregator<ImageFormat : FixedMemorySize>(
 @ExperimentalTime
 class CardImageOcrResultAggregator(
     config: ResultAggregatorConfig,
-    listener: AggregateResultListener<CardImage, CardOcrResult>,
+    listener: AggregateResultListener<ScanImage, CardOcrResult>,
     requiredAgreementCount: Int? = null
-) : CardOcrResultAggregator<CardImage>(config, listener, requiredAgreementCount) {
+) : CardOcrResultAggregator<ScanImage>(config, listener, requiredAgreementCount) {
+
+    companion object {
+        const val FRAME_TYPE_VALID_NUMBER = "valid_number"
+        const val FRAME_TYPE_INVALID_NUMBER = "invalid_number"
+    }
 
     override fun isValidResult(result: CardOcrResult): Boolean =
         CreditCardUtils.isValidCardNumber(result.number?.number)
 
+    override fun getFrameSizeBytes(frame: ScanImage): Int = frame.sizeInBytes
+
     // TODO: This should store the least blurry images available
-    override fun shouldSaveFrame(
-        result: CardOcrResult,
-        frame: CardImage
-    ): Boolean = isValidResult(result)
+    override fun getSaveFrameIdentifier(result: CardOcrResult, frame: ScanImage): String? =
+        if (isValidResult(result)) {
+            FRAME_TYPE_VALID_NUMBER
+        } else {
+            FRAME_TYPE_INVALID_NUMBER
+        }
 }

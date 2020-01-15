@@ -17,35 +17,35 @@ import androidx.camera.core.PreviewConfig
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.getbouncer.cardscan.base.camera.CardImageAnalysisAdapter
-import com.getbouncer.cardscan.base.domain.CardImage
+import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.ml.AggregateResultListener
 import com.getbouncer.cardscan.base.ml.CardImageOcrResultAggregator
-import com.getbouncer.cardscan.base.ml.CoroutineMemoryBoundAnalyzerLoop
+import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
 import com.getbouncer.cardscan.base.ml.Rate
 import com.getbouncer.cardscan.base.ml.ResultAggregatorConfig
 import com.getbouncer.cardscan.base.ml.models.MockCpuAnalyzer
+import com.getbouncer.cardscan.base.util.calculateCardPreviewRect
 import kotlinx.android.synthetic.main.activity_main.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.util.concurrent.Executors
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 import kotlin.time.seconds
 
-private const val CAMERA_PERMISSION_REQUEST = 1200
+private const val CAMERA_PERMISSION_REQUEST_CODE = 1200
 
+@ExperimentalCoroutinesApi
 @ExperimentalTime
-class CardScanActivity : AppCompatActivity(), AggregateResultListener<CardImage, CardOcrResult> {
-
-    companion object {
-        private const val DEFAULT_FRAME_STORAGE_BYTES = 0x2000000 // 32MB
-    }
+@ExperimentalUnsignedTypes
+class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage, CardOcrResult> {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST)
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST_CODE)
         } else {
             texture.post { startCamera() }
         }
@@ -61,7 +61,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<CardImage,
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         when (requestCode) {
-            CAMERA_PERMISSION_REQUEST -> texture.post { startCamera() }
+            CAMERA_PERMISSION_REQUEST_CODE -> texture.post { startCamera() }
         }
     }
 
@@ -70,24 +70,25 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<CardImage,
             .withMaxTotalAggregationTime(10.seconds)
             .withTrackFrameRate(true)
             .build()
-        val mainLoop = CoroutineMemoryBoundAnalyzerLoop(
+        val mainLoop = MemoryBoundAnalyzerLoop(
             analyzer = MockCpuAnalyzer(),
-            resultHandler = CardImageOcrResultAggregator(resultAggregatorConfig, this, requiredAgreementCount = 5)
-//            , maximumFrameMemoryBytes = DEFAULT_FRAME_STORAGE_BYTES
+            resultHandler = CardImageOcrResultAggregator(resultAggregatorConfig, this, 5)
         )
-        val mainLoopAdapter = CardImageAnalysisAdapter<CardOcrResult>(mainLoop)
+        val previewSize = Size(texture.width, texture.height)
+        val previewCard = calculateCardPreviewRect(previewSize)
+        val mainLoopAdapter = CardImageAnalysisAdapter(previewSize, previewCard, mainLoop)
         mainLoop.start()
 
         val imageAnalysisConfig = ImageAnalysisConfig.Builder()
             .setTargetRotation(Surface.ROTATION_0)
-//            .setTargetResolution(Size(texture.width, texture.height))
             .build()
         val imageAnalysis = ImageAnalysis(imageAnalysisConfig)
+
         imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), mainLoopAdapter)
 
         val previewConfig: PreviewConfig = PreviewConfig.Builder()
             .setLensFacing(CameraX.LensFacing.BACK)
-            .setTargetResolution(Size(texture.width, texture.height))
+            .setTargetResolution(previewSize)
             .build()
         val preview = Preview(previewConfig)
         preview.setOnPreviewOutputUpdateListener { onPreviewUpdated(it) }
@@ -130,16 +131,17 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<CardImage,
         updateTransform()
     }
 
-    override fun onResult(result: CardOcrResult, frames: List<CardImage>) {
+    override fun onResult(result: CardOcrResult, frames: Map<String, List<ScanImage>>) {
         val number = result.number
         val expiry = result.expiry
         text.text = "${number?.number ?: "____"} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}"
         Log.i("RESULT", "SCANNING ${number?.number ?: "____"} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}")
     }
 
-    override fun onInterimResult(result: CardOcrResult, frame: CardImage) {
+    override fun onInterimResult(result: CardOcrResult, frame: ScanImage) {
         val number = result.number
         val expiry = result.expiry
+        debug_bitmap.setImageBitmap(frame.ocrImage)
         if (number != null) {
             text.text = "${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}"
             Log.i("RESULT", "SCANNING ${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}")

@@ -1,20 +1,15 @@
 package com.getbouncer.cardscan.base.domain
 
-import android.util.Size
-import java.nio.ByteBuffer
+import android.graphics.Bitmap
 
 /**
- * An object with a known, fixed size in memory
+ * An image scanned and ready for image processing
  */
-interface FixedMemorySize {
-    val sizeInBytes: Int
-}
-
-/**
- *
- */
-data class CardImage(val image: ByteBuffer, val rotationDegrees: Int, val size: Size) : FixedMemorySize {
-    override val sizeInBytes by lazy { image.limit() }
-
-    override fun toString(): String = "CARD IMAGE SIZE $sizeInBytes"
+data class ScanImage(
+    val fullImage: Bitmap,
+    val objImage: Bitmap,
+    val ocrImage: Bitmap,
+    val rotationDegrees: Int
+) {
+    val sizeInBytes = fullImage.byteCount + objImage.byteCount + ocrImage.byteCount
 }

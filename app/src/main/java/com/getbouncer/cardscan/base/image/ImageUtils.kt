@@ -4,11 +4,13 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.pm.ConfigurationInfo
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageFormat
 import android.graphics.Rect
-import android.graphics.RectF
+import android.graphics.YuvImage
 import android.util.Size
 import androidx.camera.core.ImageProxy
-import com.getbouncer.cardscan.base.domain.CardImage
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.IntBuffer
@@ -17,35 +19,13 @@ import kotlin.math.roundToInt
 private const val DIM_PIXEL_SIZE = 3
 private const val NUM_BYTES_PER_CHANNEL = 4 // Float.size / Byte.size
 
-fun ImageProxy.toBitmap(): Bitmap {
-    val nv21 = this.toNV21ByteArray()
-
-    val argb = IntArray(this.width * this.height).also {
-        YUVDecoder.yuvToRGBA(nv21, this.width, this.height, it)
-    }
-
-    val bitmap = Bitmap.createBitmap(this.width, this.height, Bitmap.Config.ARGB_8888)
-    bitmap.copyPixelsFromBuffer(IntBuffer.wrap(argb))
-    return bitmap
-}
-
-fun Bitmap.toRGBAByteBuffer(mean: Float = 0F, std: Float = 255F): ByteBuffer {
-    val rgba = IntArray(width * height).also {
-        getPixels(it, 0, width, 0, 0, width, height)
-    }
-
-    val rgbaFloat = ByteBuffer.allocateDirect(this.width * this.height * DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL)
-    rgbaFloat.order(ByteOrder.nativeOrder())
-    rgba.forEach {
-        rgbaFloat.putFloat(((it shr 16 and 0xFF) - mean) / std)
-        rgbaFloat.putFloat(((it shr 8 and 0xFF) - mean) / std)
-        rgbaFloat.putFloat(((it and 0xFF) - mean) / std)
-    }
-
-    return rgbaFloat
-}
-
-fun ImageProxy.toNV21ByteArray(): ByteArray {
+/**
+ * Pixel3: 149.71 FPS, 6.68 MS/F
+ */
+fun ImageProxy.toBitmap(
+    crop: Rect = Rect(0, 0, this.width, this.height),
+    quality: Int = 85
+): Bitmap {
     val yBuffer = planes[0].buffer // Y
     val uBuffer = planes[1].buffer // U
     val vBuffer = planes[2].buffer // V
@@ -61,33 +41,33 @@ fun ImageProxy.toNV21ByteArray(): ByteArray {
     vBuffer.get(nv21, ySize, vSize)
     uBuffer.get(nv21, ySize + vSize, uSize)
 
-    return nv21
+    val yuvImage = YuvImage(nv21, ImageFormat.NV21, this.width, this.height, null)
+    val out = ByteArrayOutputStream()
+    yuvImage.compressToJpeg(crop, quality, out)
+    val imageBytes = out.toByteArray()
+    return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
 }
 
-fun ImageProxy.toRGBAByteBuffer(mean: Float = 0F, std: Float = 255F): ByteBuffer {
-    val nv21 = this.toNV21ByteArray()
-
-    val rgba = IntArray(width * height).also {
-        YUVDecoder.yuvToRGBA(nv21, width, height, it)
+/**
+ * Pixel3: 39.10 FPS, 25.58 MS/F
+ */
+fun Bitmap.toRGBByteBuffer(mean: Float = 0F, std: Float = 255F): ByteBuffer {
+    val argb = IntArray(width * height).also {
+        getPixels(it, 0, width, 0, 0, width, height)
     }
 
-    val rgbaFloat = ByteBuffer.allocateDirect(this.width * this.height * DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL)
-    rgbaFloat.order(ByteOrder.nativeOrder())
-    rgba.forEach {
-        rgbaFloat.putFloat(((it shr 16 and 0xFF) - mean) / std)
-        rgbaFloat.putFloat(((it shr 8 and 0xFF) - mean) / std)
-        rgbaFloat.putFloat(((it and 0xFF) - mean) / std)
+    val rgbFloat = ByteBuffer.allocateDirect(this.width * this.height * DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL)
+    rgbFloat.order(ByteOrder.nativeOrder())
+    argb.forEach {
+        // ignore the alpha value ((it shr 24 and 0xFF) - mean) / std)
+        rgbFloat.putFloat(((it shr 16 and 0xFF) - mean) / std)
+        rgbFloat.putFloat(((it shr 8 and 0xFF) - mean) / std)
+        rgbFloat.putFloat(((it and 0xFF) - mean) / std)
     }
 
-    return rgbaFloat
+    rgbFloat.rewind()
+    return rgbFloat
 }
-
-fun ImageProxy.toCardImage(rotationDegrees: Int): CardImage =
-    CardImage(
-        this.toRGBAByteBuffer(),
-        rotationDegrees,
-        Size(this.width, this.height)
-    )
 
 fun hasOpenGl31(context: Context): Boolean {
     val openGlVersion = 0x00030001
@@ -101,39 +81,38 @@ fun hasOpenGl31(context: Context): Boolean {
     }
 }
 
+/**
+ * Pixel3: 31.96 FPS, 31.29 MS/F
+ */
 fun ByteBuffer.rbgaToBitmap(size: Size, mean: Float = 0F, std: Float = 255F): Bitmap {
+    this.rewind()
+    assert(this.limit() == size.width * size.height) { "ByteBuffer limit does not match expected size" }
     val bitmap = Bitmap.createBitmap(size.width, size.height, Bitmap.Config.ARGB_8888)
     val rgba = IntBuffer.allocate(size.width * size.height)
     while (this.hasRemaining()) {
-        this.float.also {
-            rgba.put(
-                (((it * std) + mean).toInt() shl 16)
-                + (((it * std) + mean).toInt() shl 8)
-                + (((it * std) + mean).toInt())
-            )
-        }
+        rgba.put(
+            (0xFF shl 24)  // set 0xFF for the alpha value
+            + (((this.float * std) + mean).roundToInt())
+            + (((this.float * std) + mean).roundToInt() shl 8)
+            + (((this.float * std) + mean).roundToInt() shl 16)
+        )
     }
-    rgba.reset()
+    rgba.rewind()
     bitmap.copyPixelsFromBuffer(rgba)
     return bitmap
 }
 
-fun Bitmap.crop(crop: RectF): Bitmap =
-    Bitmap.createBitmap(
+/**
+ * Pixel3: 1739.62 FPS, 0.57 MS/F
+ */
+fun Bitmap.crop(crop: Rect): Bitmap {
+    assert(crop.left < crop.right && crop.top < crop.bottom) { "Cannot use negative crop" }
+    assert(crop.left >= 0 && crop.top >= 0 && crop.bottom <= this.height && crop.right <= this.width) { "Crop is larger than source image" }
+    return Bitmap.createBitmap(
         this,
-        crop.left.roundToInt(),
-        crop.top.roundToInt(),
-        crop.width().roundToInt(),
-        crop.height().roundToInt()
+        crop.left,
+        crop.top,
+        crop.width(),
+        crop.height()
     )
-
-fun ByteBuffer.crop(originalSize: Size, crop: Rect): ByteBuffer {
-    val cropped = ByteBuffer.allocateDirect(crop.width() * crop.height() * DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL)
-    for (y in crop.top..crop.bottom) {
-        this.position((DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL * y * originalSize.width) + (crop.left * DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL))
-        for (x in 0..crop.width() * DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL) {
-            cropped.put(this.get())
-        }
-    }
-    return cropped
 }
