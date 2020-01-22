@@ -1,10 +1,10 @@
 package com.getbouncer.cardscan.base.image
 
-import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.RectF
 import android.util.Size
 import androidx.core.graphics.drawable.toBitmap
@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 @RunWith(AndroidJUnit4::class)
 class ImageUtilsTest {
 
-    private val testResources: Resources = InstrumentationRegistry.getInstrumentation().context.resources
+    private val testResources = InstrumentationRegistry.getInstrumentation().context.resources
 
     @Test
     fun bitmap_toRGBByteBuffer_fromPhoto_isCorrect() {
@@ -101,7 +101,7 @@ class ImageUtilsTest {
 
         // check the expected sizes of the images
         assertEquals(
-            "Scaled images are of the wrong size",
+            "Scaled image is the wrong size",
             Size(bitmap.width / 5, bitmap.height / 5),
             Size(scaledBitmap.width, scaledBitmap.height)
         )
@@ -111,6 +111,42 @@ class ImageUtilsTest {
         for (x in 0 until scaledBitmap.width) {
             for (y in 0 until scaledBitmap.height) {
                 encounteredNonZeroPixel = encounteredNonZeroPixel || scaledBitmap.getPixel(x, y) != 0
+            }
+        }
+
+        assertTrue("Pixels were all zero", encounteredNonZeroPixel)
+    }
+
+    @Test
+    fun bitmap_crop_isCorrect() {
+        val bitmap = testResources.getDrawable(R.drawable.ocr_card_numbers_clear, null).toBitmap()
+        assertNotNull(bitmap)
+        assertEquals("Bitmap width is not expected", 600, bitmap.width)
+        assertEquals("Bitmap height is not expected", 375, bitmap.height)
+
+        // convert the bitmap to a byte buffer
+        val croppedBitmap = bitmap.crop(Rect(
+            bitmap.width / 4,
+            bitmap.height / 4,
+            bitmap.width * 3 / 4,
+            bitmap.height * 3 / 4
+        ))
+
+        // check the expected sizes of the images
+        assertEquals(
+            "Cropped image is the wrong size",
+            Size(bitmap.width * 3 / 4 - bitmap.width / 4, bitmap.height * 3 / 4 - bitmap.height / 4),
+            Size(croppedBitmap.width, croppedBitmap.height)
+        )
+
+        // check each pixel of the images
+        var encounteredNonZeroPixel = false
+        for (x in 0 until croppedBitmap.width) {
+            for (y in 0 until croppedBitmap.height) {
+                val croppedPixel = croppedBitmap.getPixel(x, y)
+                val originalPixel = bitmap.getPixel(x + bitmap.width / 4, y + bitmap.height / 4)
+                assertEquals("Difference at pixel $x, $y", originalPixel, croppedPixel)
+                encounteredNonZeroPixel = encounteredNonZeroPixel || croppedPixel != 0
             }
         }
 
