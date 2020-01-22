@@ -118,7 +118,8 @@
 //        featureMapSizes.put("layerTwoWidth", 19);
 //        featureMapSizes.put("layerTwoHeight", 12);
 //
-//        /** The model reshapes all the data to 1 x [All Data Points]
+//        /**
+//         * The model reshapes all the data to 1 x [All Data Points]
 //         */
 //        outputLocations = new float[1][NUM_LOC];
 //        outputClasses = new float[1][NUM_CLASS];

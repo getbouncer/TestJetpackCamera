@@ -5,23 +5,28 @@ import android.graphics.RectF
 import android.util.Size
 import com.getbouncer.cardscan.base.R
 import com.getbouncer.cardscan.base.domain.DetectionBox
+import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.image.hasOpenGl31
+import com.getbouncer.cardscan.base.image.scale
+import com.getbouncer.cardscan.base.image.toRGBByteBuffer
 import com.getbouncer.cardscan.base.ml.MLResourceModelFactory
 import com.getbouncer.cardscan.base.ml.MLTFLResourceModel
 import org.tensorflow.lite.Interpreter
 import java.nio.ByteBuffer
 import kotlin.collections.ArrayList
+import kotlin.time.ExperimentalTime
 
 
+@ExperimentalTime
 class FindFourModel(
     factory: MLResourceModelFactory,
     context: Context,
     private val originalImageSize: Size
-) : MLTFLResourceModel<ByteBuffer, FindFourModel.Prediction, Array<Array<Array<FloatArray>>>>(factory) {
+) : MLTFLResourceModel<ScanImage, ByteBuffer, FindFourModel.Prediction, Array<Array<Array<FloatArray>>>>(factory) {
 
     override val logTag: String = "FIND_FOUR_MODEL"
 
-    override fun buildEmptyClassifiers(): Array<Array<Array<FloatArray>>> =
+    override fun buildEmptyMLOutput(): Array<Array<Array<FloatArray>>> =
         Array(1) { Array(ROWS) { Array(COLS) { FloatArray(CLASSES) } } }
 
     companion object {
@@ -35,11 +40,11 @@ class FindFourModel(
         private const val DIGIT_CLASSIFIER = 1
         private const val EXPIRY_CLASSIFIER = 2
 
-        private fun hasDigits(classifiers: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Boolean = digitConfidence(classifiers, row, col) >= 0.5
-        private fun hasExpiry(classifiers: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Boolean = expiryConfidence(classifiers, row, col) >= 0.5
+        private fun hasDigits(mlOutput: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Boolean = digitConfidence(mlOutput, row, col) >= 0.5
+        private fun hasExpiry(mlOutput: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Boolean = expiryConfidence(mlOutput, row, col) >= 0.5
 
-        private fun digitConfidence(classifiers: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Float = classifiers[0][row][col][DIGIT_CLASSIFIER]
-        private fun expiryConfidence(classifiers: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Float = classifiers[0][row][col][EXPIRY_CLASSIFIER]
+        private fun digitConfidence(mlOutput: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Float = mlOutput[0][row][col][DIGIT_CLASSIFIER]
+        private fun expiryConfidence(mlOutput: Array<Array<Array<FloatArray>>>, row: Int, col: Int): Float = mlOutput[0][row][col][EXPIRY_CLASSIFIER]
     }
 
     override val modelFileResource: Int = R.raw.findfour
@@ -50,16 +55,18 @@ class FindFourModel(
         .setUseNNAPI(USE_GPU && hasOpenGl31(context))
         .setNumThreads(NUM_THREADS)
 
-    override fun interpretClassifierResults(classifiers: Array<Array<Array<FloatArray>>>): Prediction {
+    override fun transformData(data: ScanImage): ByteBuffer = data.ocrImage.scale(trainedImageSize).toRGBByteBuffer()
+
+    override fun interpretMLOutput(data: ScanImage, mlOutput: Array<Array<Array<FloatArray>>>): Prediction {
         val digitBoxes = ArrayList<DetectionBox>()
         for (row in 0..ROWS) {
             for (col in 0..COLS) {
-                if (hasDigits(classifiers, row, col)) {
+                if (hasDigits(mlOutput, row, col)) {
                     digitBoxes.add(DetectionBox(
                         getBounds(row, col),
                         row,
                         col,
-                        digitConfidence(classifiers, row, col)
+                        digitConfidence(mlOutput, row, col)
                     ))
                 }
             }
@@ -68,12 +75,12 @@ class FindFourModel(
         val expiryBoxes = ArrayList<DetectionBox>()
         for (row in 0..ROWS) {
             for (col in 0..COLS) {
-                if (hasExpiry(classifiers, row, col)) {
+                if (hasExpiry(mlOutput, row, col)) {
                     expiryBoxes.add(DetectionBox(
                         getBounds(row, col),
                         row,
                         col,
-                        expiryConfidence(classifiers, row, col)
+                        expiryConfidence(mlOutput, row, col)
                     ))
                 }
             }
@@ -95,4 +102,10 @@ class FindFourModel(
     }
 
     data class Prediction(val detectedDigits: List<DetectionBox>, val detectedExpiry: List<DetectionBox>)
+
+    override fun executeInterpreter(
+        tfInterpreter: Interpreter,
+        data: ByteBuffer,
+        mlOutput: Array<Array<Array<FloatArray>>>
+    ) = tfInterpreter.run(data, mlOutput)
 }

@@ -2,12 +2,10 @@ package com.getbouncer.cardscan.base
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Matrix
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
 import android.util.Size
-import android.view.Surface
 import android.view.ViewGroup
 import androidx.camera.core.CameraX
 import androidx.camera.core.ImageAnalysis
@@ -21,10 +19,11 @@ import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.ml.AggregateResultListener
 import com.getbouncer.cardscan.base.ml.CardImageOcrResultAggregator
+import com.getbouncer.cardscan.base.ml.MLResourceModelFactory
 import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
 import com.getbouncer.cardscan.base.ml.Rate
 import com.getbouncer.cardscan.base.ml.ResultAggregatorConfig
-import com.getbouncer.cardscan.base.ml.models.MockCpuAnalyzer
+import com.getbouncer.cardscan.base.ml.models.SSDOcrModel
 import com.getbouncer.cardscan.base.util.calculateCardPreviewRect
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -70,8 +69,9 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
             .withMaxTotalAggregationTime(10.seconds)
             .withTrackFrameRate(true)
             .build()
+        val mlFactory = MLResourceModelFactory(this)
         val mainLoop = MemoryBoundAnalyzerLoop(
-            analyzer = MockCpuAnalyzer(),
+            analyzer = SSDOcrModel(mlFactory, this.applicationContext),
             resultHandler = CardImageOcrResultAggregator(resultAggregatorConfig, this, 5)
         )
         val previewSize = Size(texture.width, texture.height)
@@ -80,7 +80,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         mainLoop.start()
 
         val imageAnalysisConfig = ImageAnalysisConfig.Builder()
-            .setTargetRotation(Surface.ROTATION_0)
+            .setLensFacing(CameraX.LensFacing.BACK)
             .build()
         val imageAnalysis = ImageAnalysis(imageAnalysisConfig)
 
@@ -98,20 +98,21 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     }
 
     private fun updateTransform() {
-        val matrix = Matrix()
-        val centerX = texture.width / 2f
-        val centerY = texture.height / 2f
+//        val matrix = Matrix()
+//        val centerX = texture.width / 2f
+//        val centerY = texture.height / 2f
+//
+//        val rotationDegrees = when (texture.display.rotation) {
+//            Surface.ROTATION_0 -> 0
+//            Surface.ROTATION_90 -> 90
+//            Surface.ROTATION_180 -> 180
+//            Surface.ROTATION_270 -> 270
+//            else -> return
+//        }
+//
+//        matrix.postRotate(-rotationDegrees.toFloat(), centerX, centerY)
+//        texture.setTransform(matrix)
 
-        val rotationDegrees = when (texture.display.rotation) {
-            Surface.ROTATION_0 -> 0
-            Surface.ROTATION_90 -> 90
-            Surface.ROTATION_180 -> 180
-            Surface.ROTATION_270 -> 270
-            else -> return
-        }
-
-        matrix.postRotate(-rotationDegrees.toFloat(), centerX, centerY)
-        texture.setTransform(matrix)
     }
 
     /**
@@ -146,6 +147,10 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
             text.text = "${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}"
             Log.i("RESULT", "SCANNING ${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}")
         }
+    }
+
+    override fun onInvalidResult(result: CardOcrResult, frame: ScanImage, haveSeenValidResult: Boolean) {
+        debug_bitmap.setImageBitmap(frame.ocrImage)
     }
 
     override fun onUpdateProcessingRate(overallRate: Rate, instantRate: Rate) {

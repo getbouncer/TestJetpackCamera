@@ -8,8 +8,7 @@ import android.graphics.Bitmap
 data class ScanImage(
     val fullImage: Bitmap,
     val objImage: Bitmap,
-    val ocrImage: Bitmap,
-    val rotationDegrees: Int
+    val ocrImage: Bitmap
 ) {
     val sizeInBytes = fullImage.byteCount + objImage.byteCount + ocrImage.byteCount
 }

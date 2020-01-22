@@ -2,7 +2,7 @@ package com.getbouncer.cardscan.base.ml
 
 import android.content.Context
 import android.util.Size
-import android.util.TimingLogger
+import com.getbouncer.cardscan.base.util.Timer
 import org.tensorflow.lite.Interpreter
 import java.io.File
 import java.io.FileInputStream
@@ -14,12 +14,14 @@ import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
+import kotlin.time.ExperimentalTime
 
 /**
  * A TensorFlowLite analyzer defines a [MappedByteBuffer] and [Interpreter.Options] to construct a
  * TF interpreter. This interpreter can be used in the analyzer's [analyze] method.
  */
-abstract class MLTensorFlowLiteAnalyzer<Input, Output, Classifiers> : Analyzer<Input, Output> {
+@ExperimentalTime
+abstract class MLTensorFlowLiteAnalyzer<Input, MLInput, Output, MLOutput> : Analyzer<Input, Output> {
 
     abstract val logTag: String
 
@@ -29,31 +31,50 @@ abstract class MLTensorFlowLiteAnalyzer<Input, Output, Classifiers> : Analyzer<I
 
     abstract val tfOptions: Interpreter.Options
 
-    abstract fun buildEmptyClassifiers(): Classifiers
+    abstract fun buildEmptyMLOutput(): MLOutput
 
-    abstract fun interpretClassifierResults(classifiers: Classifiers): Output
+    abstract fun interpretMLOutput(data: Input, mlOutput: MLOutput): Output
 
     private val tfInterpreter: Interpreter by lazy { Interpreter(tfModel, tfOptions) }
 
+    private val loggingTransformTimer by lazy { Timer.newInstance(logTag, "transform ${this::class.java.simpleName}") }
+    private val loggingMLOutputTimer by lazy { Timer.newInstance(logTag, "ml_output ${this::class.java.simpleName}") }
+    private val loggingAnalysisTimer by lazy { Timer.newInstance(logTag, "analyze ${this::class.java.simpleName}") }
+    private val loggingInterpretTimer by lazy { Timer.newInstance(logTag, "interpret ${this::class.java.simpleName}") }
+
+    abstract fun transformData(data: Input): MLInput
+
+    abstract fun executeInterpreter(tfInterpreter: Interpreter, data: MLInput, mlOutput: MLOutput)
+
     override fun analyze(data: Input): Output {
-        val executionTimer = TimingLogger(logTag, "analyze")
-        val classifiers = buildEmptyClassifiers()
-        tfInterpreter.run(data, classifiers)
-        executionTimer.addSplit("model_execution")
-        val prediction = interpretClassifierResults(classifiers)
-        executionTimer.addSplit("result_interpretation")
-        executionTimer.dumpToLog()
-        return prediction
+        val mlInput = loggingTransformTimer.measure {
+            transformData(data)
+        }
+
+        val mlOutput = loggingMLOutputTimer.measure {
+            buildEmptyMLOutput()
+        }
+
+        loggingAnalysisTimer.measure {
+            executeInterpreter(tfInterpreter, mlInput, mlOutput)
+        }
+
+        return loggingInterpretTimer.measure {
+            interpretMLOutput(data, mlOutput)
+        }
     }
+
+    fun close() = tfInterpreter.close()
 }
 
 /**
  * A TensorFlowLite resource model is a TF model that is defined by a local resource within the
  * android package. In this case, models are stored in `res/raw`.
  */
-abstract class MLTFLResourceModel<Input, Output, Classifiers>(
+@ExperimentalTime
+abstract class MLTFLResourceModel<Input, MLInput, Output, MLOutput>(
     private val factory: MLResourceModelFactory
-) : MLTensorFlowLiteAnalyzer<Input, Output, Classifiers>() {
+) : MLTensorFlowLiteAnalyzer<Input, MLInput, Output, MLOutput>() {
 
     abstract val modelFileResource: Int
 
@@ -67,8 +88,9 @@ abstract class MLTFLResourceModel<Input, Output, Classifiers>(
  * A TensorFlowLite downloaded model is a TF model that is downloaded from a URL specified in the
  * factory.
  */
-abstract class MLTFLDownloadedModel<Input, Output, Classifiers>(private val factory: MLDownloadedModelFactory)
-    : MLTensorFlowLiteAnalyzer<Input, Output, Classifiers>() {
+@ExperimentalTime
+abstract class MLTFLDownloadedModel<Input, MLInput, Output, MLOutput>(private val factory: MLDownloadedModelFactory)
+    : MLTensorFlowLiteAnalyzer<Input, MLInput, Output, MLOutput>() {
 
     abstract val url: URL
 

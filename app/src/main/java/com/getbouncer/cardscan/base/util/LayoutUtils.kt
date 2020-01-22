@@ -1,6 +1,7 @@
 package com.getbouncer.cardscan.base.util
 
 import android.content.res.Resources
+import android.graphics.Point
 import android.graphics.Rect
 import android.util.Rational
 import android.util.Size
@@ -53,14 +54,16 @@ fun calculateCardPreviewRect(
     val cardSize = maxAspectRatioInSize(squareSize, cardRatio)
 
     // calculate the card position
-    val verticalPosition = ((paddedSize.height - squareSize.height) * verticalWeight).roundToInt()
-        + (squareSize.height - cardSize.height) / 2
-    val horizontalPosition = ((paddedSize.width - squareSize.width) * horizontalWeight).roundToInt()
-        + (squareSize.width - cardSize.width) / 2
+    val topLeftPoint = Point(
+        ((paddedSize.width - squareSize.width) * horizontalWeight).roundToInt()
+                + (squareSize.width - cardSize.width) / 2,
+        ((paddedSize.height - squareSize.height) * verticalWeight).roundToInt()
+                + (squareSize.height - cardSize.height) / 2
+    )
 
     // calculate the bounds of the card preview
-    val cardLeft = minimumPaddingPx + horizontalPosition
-    val cardTop = minimumPaddingPx + verticalPosition
+    val cardLeft = minimumPaddingPx + topLeftPoint.x
+    val cardTop = minimumPaddingPx + topLeftPoint.y
     val cardRight = cardLeft + cardSize.width
     val cardBottom = cardTop + cardSize.height
 

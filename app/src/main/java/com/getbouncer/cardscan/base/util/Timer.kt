@@ -1,6 +1,7 @@
 package com.getbouncer.cardscan.base.util
 
 import android.util.Log
+import android.util.TimingLogger
 import com.getbouncer.cardscan.base.config.MEASURE_TIME
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime

@@ -6,6 +6,7 @@ import android.content.pm.ConfigurationInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
+import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.YuvImage
 import android.util.Size
@@ -116,3 +117,12 @@ fun Bitmap.crop(crop: Rect): Bitmap {
         crop.height()
     )
 }
+
+fun Bitmap.rotate(rotationDegrees: Float): Bitmap {
+    val matrix = Matrix()
+    matrix.postRotate(rotationDegrees)
+    return Bitmap.createBitmap(this, 0, 0, this.width, this.height, matrix, true)
+}
+
+fun Bitmap.scale(size: Size, filter: Boolean = false): Bitmap =
+    Bitmap.createScaledBitmap(this, size.width, size.height, filter).apply { this.config = this@scale.config }

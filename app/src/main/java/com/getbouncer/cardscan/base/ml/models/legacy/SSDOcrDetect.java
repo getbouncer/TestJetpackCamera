@@ -1,4 +1,3 @@
-//
 //package com.getbouncer.cardscan.base.ml.models.legacy;
 //
 //import android.content.Context;
@@ -8,11 +7,12 @@
 //import android.os.SystemClock;
 //import android.util.Log;
 //
-//import com.getbouncer.cardscan.base.ssd.ArrUtils;
-//import com.getbouncer.cardscan.base.ssd.DetectedOcrBox;
-//import com.getbouncer.cardscan.base.ssd.OcrPriorsGen;
-//import com.getbouncer.cardscan.base.ssd.PredictionAPI;
-//import com.getbouncer.cardscan.base.ssd.Result;
+//import com.getbouncer.cardscan.base.ml.models.legacy.ssd.ArrUtils;
+//import com.getbouncer.cardscan.base.ml.models.legacy.ssd.DetectedOcrBox;
+//import com.getbouncer.cardscan.base.ml.models.legacy.ssd.OcrPriorsGen;
+//import com.getbouncer.cardscan.base.ml.models.legacy.ssd.PredictionAPI;
+//import com.getbouncer.cardscan.base.ml.models.legacy.ssd.Result;
+//import com.getbouncer.cardscan.base.util.CreditCardUtils;
 //
 //import java.util.ArrayList;
 //import java.util.Collections;
@@ -22,18 +22,10 @@
 //
 //
 //public class SSDOcrDetect {
-//    private static SSDOcrModel ssdOcrModel = null;
 //    private static float[][] priors = null;
 //
-//    public List<DetectedOcrBox> objectBoxes = new ArrayList<>();
-//    boolean hadUnrecoverableException = false;
-//
-//    /** We don't use the following two for now */
-//    public static boolean USE_GPU = false;
-//
-//    static boolean isInit() {
-//        return ssdOcrModel != null;
-//    }
+//    private List<DetectedOcrBox> objectBoxes = new ArrayList<>();
+//    private boolean hadUnrecoverableException = false;
 //
 //    private String ssdOutputToPredictions(Bitmap image){
 //        ArrUtils arrUtils = new ArrUtils();
@@ -51,7 +43,7 @@
 //
 //        PredictionAPI predAPI = new PredictionAPI();
 //        Result result = predAPI.predictionAPI(k_scores, k_boxes, SSDOcrModel.PROB_THRESHOLD,
-//                SSDOcrModel.IOU_THRESHOLD, SSDOcrModel.CANDIDATE_SIZE, SSDOcrModel.TOP_K);
+//                SSDOcrModel.IOU_THRESHOLD, SSDOcrModel.TOP_K);
 //        if (result.pickedBoxProbs.size() != 0 && result.pickedLabels.size() != 0)
 //        {
 //            for (int i = 0; i < result.pickedBoxProbs.size(); ++i){
@@ -62,7 +54,7 @@
 //                objectBoxes.add(ocrBox);
 //            }
 //        }
-//        String numberOCR = "";
+//        String numberOCR;
 //        Collections.sort(objectBoxes);
 //        StringBuilder num = new StringBuilder();
 //        for (DetectedOcrBox box : objectBoxes){
@@ -164,6 +156,7 @@
 //            try{
 //                if (ssdOcrModel == null){
 //                    ssdOcrModel = new SSDOcrModel(context);
+//                    ssdOcrModel.setNumThreads(NUM_THREADS);
 //                    /** Since all the frames use the same set of priors
 //                     * We generate these once and use for all the frame
 //                     */

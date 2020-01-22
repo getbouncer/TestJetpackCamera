@@ -48,6 +48,12 @@ interface AggregateResultListener<DataFrame, ModelResult> {
     fun onInterimResult(result: ModelResult, frame: DataFrame)
 
     /**
+     * An invalid result was received, but the model is still processing more data frames. This is
+     * useful for displaying a debug window
+     */
+    fun onInvalidResult(result: ModelResult, frame: DataFrame, haveSeenValidResult: Boolean)
+
+    /**
      * The processing rate has been updated. This is useful for debugging and measuring performance.
      *
      * @param overallRate: The total frame rate at which the analyzer is running
@@ -166,6 +172,7 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
     private var lastNotifyTime: ClockMark = MonoClock.markNow()
     private var totalFramesProcessed: AtomicLong = AtomicLong(0)
     private var framesProcessedSinceLastUpdate: AtomicLong = AtomicLong(0)
+    private var haveSeenValidResult: Boolean = false
 
     private val savedFrames = mutableMapOf<String, LinkedList<DataFrame>>()
     private val savedFramesSizeBytes = mutableMapOf<String, Int>()
@@ -187,7 +194,10 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
         saveFrames(result, data)
 
         if (validResult) {
+            haveSeenValidResult = true
             notifyOfInterimResult(result, data)
+        } else {
+            notifyOfInvalidResult(result, data, haveSeenValidResult)
         }
 
         val finalResult = aggregateResult(result, hasReachedTimeout())
@@ -309,6 +319,13 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
      */
     private fun notifyOfInterimResult(result: ModelResult, frame: DataFrame) {
         runOnMainThread(Runnable { listener.onInterimResult(result, frame) })
+    }
+
+    /**
+     * Send the listener an invalid result from this model on the main thread.
+     */
+    private fun notifyOfInvalidResult(result: ModelResult, frame: DataFrame, haveSeenValidResult: Boolean) {
+        runOnMainThread(Runnable { listener.onInvalidResult(result, frame, haveSeenValidResult) })
     }
 
     /**
