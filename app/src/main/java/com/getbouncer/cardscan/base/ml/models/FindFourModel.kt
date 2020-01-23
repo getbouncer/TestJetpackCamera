@@ -48,7 +48,6 @@ class FindFourModel(
     }
 
     override val modelFileResource: Int = R.raw.findfour
-    override val isThreadSafe: Boolean = true
     override val trainedImageSize: Size = Size(480, 302)
     override val tfOptions: Interpreter.Options = Interpreter
         .Options()

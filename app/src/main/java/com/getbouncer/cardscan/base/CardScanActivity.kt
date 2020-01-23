@@ -19,15 +19,17 @@ import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.ml.AggregateResultListener
 import com.getbouncer.cardscan.base.ml.CardImageOcrResultAggregator
-import com.getbouncer.cardscan.base.ml.MLResourceModelFactory
 import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
 import com.getbouncer.cardscan.base.ml.Rate
 import com.getbouncer.cardscan.base.ml.ResultAggregatorConfig
 import com.getbouncer.cardscan.base.ml.models.SSDOcrModel
 import com.getbouncer.cardscan.base.util.calculateCardPreviewRect
 import kotlinx.android.synthetic.main.activity_main.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.util.concurrent.Executors
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 import kotlin.time.seconds
@@ -37,7 +39,10 @@ private const val CAMERA_PERMISSION_REQUEST_CODE = 1200
 @ExperimentalCoroutinesApi
 @ExperimentalTime
 @ExperimentalUnsignedTypes
-class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage, CardOcrResult> {
+class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage, CardOcrResult>, CoroutineScope {
+
+    override val coroutineContext: CoroutineContext
+        get() = Dispatchers.Default
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,10 +74,10 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
             .withMaxTotalAggregationTime(10.seconds)
             .withTrackFrameRate(true)
             .build()
-        val mlFactory = MLResourceModelFactory(this)
         val mainLoop = MemoryBoundAnalyzerLoop(
-            analyzer = SSDOcrModel(mlFactory, this.applicationContext),
-            resultHandler = CardImageOcrResultAggregator(resultAggregatorConfig, this, 5)
+            analyzerFactory = SSDOcrModel.Factory(this),
+            resultHandler = CardImageOcrResultAggregator(resultAggregatorConfig, this, 5),
+            coroutineScope = this
         )
         val previewSize = Size(texture.width, texture.height)
         val previewCard = calculateCardPreviewRect(previewSize)

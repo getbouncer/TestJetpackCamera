@@ -10,6 +10,7 @@ import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.image.hasOpenGl31
 import com.getbouncer.cardscan.base.image.scale
 import com.getbouncer.cardscan.base.image.toRGBByteBuffer
+import com.getbouncer.cardscan.base.ml.AnalyzerFactory
 import com.getbouncer.cardscan.base.ml.MLResourceModelFactory
 import com.getbouncer.cardscan.base.ml.MLTFLResourceModel
 import com.getbouncer.cardscan.base.ml.models.legacy.ssd.ArrUtils
@@ -38,7 +39,7 @@ import kotlin.time.ExperimentalTime
  * - resultHandler: A handler for the result. Usually this is the main activity.
  */
 @ExperimentalTime
-class SSDOcrModel(factory: MLResourceModelFactory, context: Context)
+class SSDOcrModel private constructor(factory: MLResourceModelFactory, context: Context)
     : MLTFLResourceModel<ScanImage, Array<ByteBuffer>, CardOcrResult, Map<Int, Array<FloatArray>>>(factory) {
 
     companion object {
@@ -51,7 +52,7 @@ class SSDOcrModel(factory: MLResourceModelFactory, context: Context)
         private const val ASPECT_RATIO_TOLERANCE_PCT = 10
 
         private const val USE_GPU = false
-        private const val NUM_THREADS = 4
+        private const val NUM_THREADS = 1
 
         /**
          * We use the output from last two layers with feature maps 19x19 and 10x10
@@ -91,7 +92,6 @@ class SSDOcrModel(factory: MLResourceModelFactory, context: Context)
         private const val IOU_THRESHOLD = 0.50f
         private const val CENTER_VARIANCE = 0.1f
         private const val SIZE_VARIANCE = 0.2f
-//        private const val CANDIDATE_SIZE = 50
         private const val TOP_K = 20
         private val featureMapSizes by lazy {
             Hashtable<String, Int>().apply {
@@ -105,11 +105,10 @@ class SSDOcrModel(factory: MLResourceModelFactory, context: Context)
         /**
          * This value should never change, and is thread safe.
          */
-        private val priors by lazy(LazyThreadSafetyMode.SYNCHRONIZED) { OcrPriorsGen.combinePriors() }
+        private val priors by lazy { OcrPriorsGen.combinePriors() }
     }
 
     override val logTag: String = "ssd_ocr"
-    override val isThreadSafe: Boolean = true
     override val trainedImageSize: Size = Size(600, 375)
     override val tfOptions: Interpreter.Options = Interpreter
         .Options()
@@ -129,7 +128,7 @@ class SSDOcrModel(factory: MLResourceModelFactory, context: Context)
             val aspectRatio = data.ocrImage.width.toDouble() / data.ocrImage.height
             val targetAspectRatio = trainedImageSize.width.toDouble() / trainedImageSize.height.toDouble()
             if (abs(1 - aspectRatio / targetAspectRatio) > ASPECT_RATIO_TOLERANCE_PCT / 100F) {
-                Log.e(logTag, "Provided image ${Size(data.ocrImage.width, data.ocrImage.height)} is outside " +
+                Log.w(logTag, "Provided image ${Size(data.ocrImage.width, data.ocrImage.height)} is outside " +
                         "target aspect ratio $targetAspectRatio tolerance $ASPECT_RATIO_TOLERANCE_PCT%")
             }
             arrayOf(data.ocrImage.scale(trainedImageSize).toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD))
@@ -137,6 +136,7 @@ class SSDOcrModel(factory: MLResourceModelFactory, context: Context)
             arrayOf(data.ocrImage.toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD))
         }
 
+    @Synchronized
     override fun interpretMLOutput(data: ScanImage, mlOutput: Map<Int, Array<FloatArray>>): CardOcrResult {
         val arrUtils = ArrUtils()
         val outputClasses = mlOutput[0] ?: arrayOf(FloatArray(NUM_CLASS))
@@ -219,4 +219,10 @@ class SSDOcrModel(factory: MLResourceModelFactory, context: Context)
         tfInterpreter: Interpreter,
         data: Array<ByteBuffer>,
         mlOutput: Map<Int, Array<FloatArray>>) = tfInterpreter.runForMultipleInputsOutputs(data, mlOutput)
+
+    class Factory(private val context: Context) : AnalyzerFactory<SSDOcrModel> {
+        override val isThreadSafe: Boolean = true
+
+        override fun newInstance(): SSDOcrModel = SSDOcrModel(MLResourceModelFactory(context), context)
+    }
 }

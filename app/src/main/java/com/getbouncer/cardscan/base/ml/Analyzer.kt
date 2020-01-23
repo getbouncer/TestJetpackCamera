@@ -1,11 +1,12 @@
 package com.getbouncer.cardscan.base.ml
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
+
+private const val DEFAULT_COROUTINE_COUNT = 10
 
 /**
  * An analyzer takes some data as an input, and returns an analyzed output. Analyzers should not
@@ -13,9 +14,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  * a means of analyzing input data to return some form of result.
  */
 interface Analyzer<Input, Output> {
+    fun analyze(data: Input): Output
+}
+
+/**
+ * A factory to create analyzers that will be run as part of the loops
+ */
+interface AnalyzerFactory<Output : Analyzer<*, *>> {
     val isThreadSafe: Boolean
 
-    fun analyze(data: Input): Output
+    fun newInstance(): Output
 }
 
 /**
@@ -30,17 +38,16 @@ interface Analyzer<Input, Output> {
  * Note: an analyzer loop can only be started once. Once it terminates, it cannot be restarted.
  */
 abstract class AnalyzerLoop<DataFrame, Output>(
-    private val analyzer: Analyzer<DataFrame, Output>,
+    private val analyzerFactory: AnalyzerFactory<out Analyzer<DataFrame, Output>>,
     private val resultHandler: ResultHandler<DataFrame, Output>,
-    private val coroutineCount: Int = DEFAULT_COROUTINE_COUNT
-) : CoroutineScope by CoroutineScope(Dispatchers.Default) {
-
-    companion object {
-        private const val DEFAULT_COROUTINE_COUNT = 1000
-    }
+    private val coroutineScope: CoroutineScope,
+    private val coroutineCount: Int
+) {
 
     private val started: AtomicBoolean = AtomicBoolean(false)
-    private val frames: Channel<DataFrame> = Channel(5)
+    private val frames: Channel<DataFrame> = Channel(calculateChannelBufferSize())
+
+    private fun calculateChannelBufferSize(): Int = Channel.RENDEZVOUS //if (analyzerFactory.isThreadSafe) 5 else Channel.RENDEZVOUS
 
     @ExperimentalCoroutinesApi
     fun enqueueFrame(frame: DataFrame) = if (!frames.isClosedForSend) frames.offer(frame) else false
@@ -53,7 +60,7 @@ abstract class AnalyzerLoop<DataFrame, Output>(
             return
         }
 
-        if (analyzer.isThreadSafe) {
+        if (analyzerFactory.isThreadSafe) {
             repeat(coroutineCount) {
                 startWorker()
             }
@@ -62,15 +69,18 @@ abstract class AnalyzerLoop<DataFrame, Output>(
         }
     }
 
-    private fun startWorker() =
-        launch {
-            for (frame in frames) {
-                resultHandler.onResult(analyzer.analyze(frame), frame)
-                if (isFinished()) {
-                    frames.close()
-                }
+    /**
+     * Launch a worker coroutine that has access to the analyzer's `analyze` method and the result handler
+     */
+    private fun startWorker() = coroutineScope.launch {
+        val analyzer = analyzerFactory.newInstance()
+        for (frame in frames) {
+            resultHandler.onResult(analyzer.analyze(frame), frame)
+            if (isFinished()) {
+                frames.close()
             }
         }
+    }
 
     abstract fun isFinished(): Boolean
 }
@@ -89,9 +99,11 @@ abstract class AnalyzerLoop<DataFrame, Output>(
  * Any data enqueued via [enqueueFrame] will be dropped once this loop has terminated.
  */
 class MemoryBoundAnalyzerLoop<DataFrame, Output>(
-    analyzer: Analyzer<DataFrame, Output>,
-    private val resultHandler: FinishingResultHandler<DataFrame, Output>
-) : AnalyzerLoop<DataFrame, Output>(analyzer, resultHandler) {
+    analyzerFactory: AnalyzerFactory<out Analyzer<DataFrame, Output>>,
+    private val resultHandler: FinishingResultHandler<DataFrame, Output>,
+    coroutineScope: CoroutineScope,
+    coroutineCount: Int = DEFAULT_COROUTINE_COUNT
+) : AnalyzerLoop<DataFrame, Output>(analyzerFactory, resultHandler, coroutineScope, coroutineCount) {
 
     override fun isFinished(): Boolean = !resultHandler.isListening()
 }
@@ -103,9 +115,11 @@ class MemoryBoundAnalyzerLoop<DataFrame, Output>(
 @ExperimentalCoroutinesApi
 class FiniteAnalyzerLoop<DataFrame, Output>(
     frames: Collection<DataFrame>,
-    analyzer: Analyzer<DataFrame, Output>,
-    resultHandler: ResultHandler<DataFrame, Output>
-) : AnalyzerLoop<DataFrame, Output>(analyzer, resultHandler) {
+    analyzerFactory: AnalyzerFactory<out Analyzer<DataFrame, Output>>,
+    resultHandler: ResultHandler<DataFrame, Output>,
+    coroutineScope: CoroutineScope,
+    coroutineCount: Int = DEFAULT_COROUTINE_COUNT
+) : AnalyzerLoop<DataFrame, Output>(analyzerFactory, resultHandler, coroutineScope, coroutineCount) {
 
     init {
         frames.forEach { enqueueFrame(it) }

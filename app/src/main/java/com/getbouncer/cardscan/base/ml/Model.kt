@@ -1,6 +1,7 @@
 package com.getbouncer.cardscan.base.ml
 
 import android.content.Context
+import android.util.Log
 import android.util.Size
 import com.getbouncer.cardscan.base.util.Timer
 import org.tensorflow.lite.Interpreter
@@ -98,11 +99,7 @@ abstract class MLTFLDownloadedModel<Input, MLInput, Output, MLOutput>(private va
 
     abstract val sha256: String
 
-    fun warmUp() = tfModel.apply { }
-
-    override val tfModel: MappedByteBuffer by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        factory.loadModelFromWeb(url, localFileName, sha256)
-    }
+    override val tfModel: MappedByteBuffer by lazy { factory.loadModelFromWeb(url, localFileName, sha256) }
 }
 
 @Throws(IOException::class)
@@ -146,6 +143,7 @@ class MLDownloadedModelFactory(private val context: Context) {
     }
 
     @Throws(IOException::class)
+    @Synchronized
     fun loadModelFromWeb(url: URL, localFileName: String, sha256: String): MappedByteBuffer =
         if (hashMatches(localFileName, sha256)) {
             readFileToMappedByteBuffer(localFileName)

@@ -17,11 +17,9 @@ import kotlin.time.ExperimentalTime
 @ExperimentalTime
 class MockCpuAnalyzer : Analyzer<ScanImage, CardOcrResult> {
 
-    override val isThreadSafe: Boolean = false
-
     private val trainedImageSize = Size(600, 375)
-    private val scaleTimer = Timer.newInstance("AGW", "SCALE")
-    private val transformTimer = Timer.newInstance("AGW", "TRANSFORM")
+    private val scaleTimer = Timer.newInstance("MOCK_CPU", "SCALE")
+    private val transformTimer = Timer.newInstance("MOCK_CPU", "TRANSFORM")
 
     override fun analyze(data: ScanImage): CardOcrResult {
         // Simulate analyzing a credit card
@@ -34,7 +32,7 @@ class MockCpuAnalyzer : Analyzer<ScanImage, CardOcrResult> {
             scaledImage.toRGBByteBuffer()
         }
 
-        Log.v("AGW", "byte image is size ${byteImage.limit()}")
+        Log.v("MOCK_CPU", "byte image is size ${byteImage.limit()}")
         return if (Random.nextInt(500) == 1) {
             CardOcrResult(CardNumber("4847 1860 9511 8770"), CardExpiry(1, 2, 23))
         } else {
