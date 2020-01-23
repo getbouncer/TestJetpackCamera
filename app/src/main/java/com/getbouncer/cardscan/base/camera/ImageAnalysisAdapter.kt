@@ -24,6 +24,7 @@ import kotlin.time.ExperimentalTime
  * APIs. Since the loops require async enqueueing of images for analysis and execution of those
  * images, this class adapts the images from the CameraX APIs to be enqueued in the loop
  */
+@ExperimentalTime
 abstract class ImageAnalysisAdapter<ImageFormat, Output>(
     private val loop: MemoryBoundAnalyzerLoop<ImageFormat, Output>
 ) : ImageAnalysis.Analyzer {

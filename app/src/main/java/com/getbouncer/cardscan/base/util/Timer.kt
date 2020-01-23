@@ -55,8 +55,10 @@ private class LoggingTimer(
         if (updateClock.elapsedNow() > updateInterval) {
             updateClock = MonoClock.markNow()
             Log.d(tag,
-                "$name EXECUTING AT ${executionCount / exectionTotalDuration.inSeconds} FPS, " +
+                "$name EXECUTING on thread ${Thread.currentThread().name} " +
+                        "AT ${executionCount / exectionTotalDuration.inSeconds} FPS, " +
                         "${exectionTotalDuration.inMilliseconds / executionCount} MS/F"
+
             )
         }
         return result

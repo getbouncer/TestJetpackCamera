@@ -5,8 +5,26 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.ClockMark
+import kotlin.time.ExperimentalTime
+import kotlin.time.MonoClock
+import kotlin.time.milliseconds
 
-private const val DEFAULT_COROUTINE_COUNT = 10
+/**
+ * The default number of analyzers to run in parallel.
+ */
+private const val DEFAULT_ANALYZER_PARALLEL_COUNT = 10
+
+/**
+ * This indicates the minimum time between frames that are being processed. Ideally, this would be a calculated by:
+ * ```
+ * duration_of_single_execution_of_analyzer / number_of_analyzers
+ * ```
+ *
+ * Until we derive that constant, this is a limitation on the frame rate, currently capped at 20fps.
+ */
+@ExperimentalTime
+private val MINIMUM_FRAME_DURATION = 50.milliseconds
 
 /**
  * An analyzer takes some data as an input, and returns an analyzed output. Analyzers should not
@@ -37,6 +55,7 @@ interface AnalyzerFactory<Output : Analyzer<*, *>> {
  *
  * Note: an analyzer loop can only be started once. Once it terminates, it cannot be restarted.
  */
+@ExperimentalTime
 abstract class AnalyzerLoop<DataFrame, Output>(
     private val analyzerFactory: AnalyzerFactory<out Analyzer<DataFrame, Output>>,
     private val resultHandler: ResultHandler<DataFrame, Output>,
@@ -44,16 +63,18 @@ abstract class AnalyzerLoop<DataFrame, Output>(
     private val coroutineCount: Int
 ) {
 
-    private val started: AtomicBoolean = AtomicBoolean(false)
-    private val frames: Channel<DataFrame> = Channel(calculateChannelBufferSize())
+    private val started = AtomicBoolean(false)
+    open val channel by lazy { Channel<DataFrame>(calculateChannelBufferSize()) }
 
-    private fun calculateChannelBufferSize(): Int = Channel.RENDEZVOUS //if (analyzerFactory.isThreadSafe) 5 else Channel.RENDEZVOUS
-
-    @ExperimentalCoroutinesApi
-    fun enqueueFrame(frame: DataFrame) = if (!frames.isClosedForSend) frames.offer(frame) else false
+    abstract fun calculateChannelBufferSize(): Int
 
     @ExperimentalCoroutinesApi
-    fun hasMoreFrames() = !frames.isEmpty
+    fun enqueueFrame(frame: DataFrame) = if (shouldReceiveNewFrame()) { channel.offer(frame) } else false
+
+    abstract fun shouldReceiveNewFrame(): Boolean
+
+    @ExperimentalCoroutinesApi
+    fun hasMoreFrames() = !channel.isEmpty
 
     fun start() {
         if (started.getAndSet(true)) {
@@ -74,10 +95,10 @@ abstract class AnalyzerLoop<DataFrame, Output>(
      */
     private fun startWorker() = coroutineScope.launch {
         val analyzer = analyzerFactory.newInstance()
-        for (frame in frames) {
+        for (frame in channel) {
             resultHandler.onResult(analyzer.analyze(frame), frame)
             if (isFinished()) {
-                frames.close()
+                channel.close()
             }
         }
     }
@@ -98,12 +119,28 @@ abstract class AnalyzerLoop<DataFrame, Output>(
  *
  * Any data enqueued via [enqueueFrame] will be dropped once this loop has terminated.
  */
+@ExperimentalTime
 class MemoryBoundAnalyzerLoop<DataFrame, Output>(
     analyzerFactory: AnalyzerFactory<out Analyzer<DataFrame, Output>>,
     private val resultHandler: FinishingResultHandler<DataFrame, Output>,
     coroutineScope: CoroutineScope,
-    coroutineCount: Int = DEFAULT_COROUTINE_COUNT
+    coroutineCount: Int = DEFAULT_ANALYZER_PARALLEL_COUNT
 ) : AnalyzerLoop<DataFrame, Output>(analyzerFactory, resultHandler, coroutineScope, coroutineCount) {
+
+    private var lastFrameReceivedAt: ClockMark? = null
+
+    @ExperimentalCoroutinesApi
+    override fun shouldReceiveNewFrame(): Boolean {
+        val lastFrameReceivedAt = this.lastFrameReceivedAt
+        val shouldReceiveNewFrame = !channel.isClosedForSend &&
+                (lastFrameReceivedAt == null || lastFrameReceivedAt.elapsedNow() > MINIMUM_FRAME_DURATION)
+        if (shouldReceiveNewFrame) {
+            this.lastFrameReceivedAt = MonoClock.markNow()
+        }
+        return shouldReceiveNewFrame
+    }
+
+    override fun calculateChannelBufferSize(): Int = Channel.RENDEZVOUS
 
     override fun isFinished(): Boolean = !resultHandler.isListening()
 }
@@ -112,18 +149,21 @@ class MemoryBoundAnalyzerLoop<DataFrame, Output>(
  * This kind of [AnalyzerLoop] will process data provided as part of its constructor. Data will be
  * processed in the order provided.
  */
+@ExperimentalTime
 @ExperimentalCoroutinesApi
 class FiniteAnalyzerLoop<DataFrame, Output>(
-    frames: Collection<DataFrame>,
+    private val frames: Collection<DataFrame>,
     analyzerFactory: AnalyzerFactory<out Analyzer<DataFrame, Output>>,
     resultHandler: ResultHandler<DataFrame, Output>,
     coroutineScope: CoroutineScope,
-    coroutineCount: Int = DEFAULT_COROUTINE_COUNT
+    coroutineCount: Int = DEFAULT_ANALYZER_PARALLEL_COUNT
 ) : AnalyzerLoop<DataFrame, Output>(analyzerFactory, resultHandler, coroutineScope, coroutineCount) {
 
-    init {
-        frames.forEach { enqueueFrame(it) }
-    }
+    init { frames.forEach { enqueueFrame(it) } }
+
+    override fun calculateChannelBufferSize(): Int = frames.size
+
+    override fun shouldReceiveNewFrame(): Boolean = !channel.isClosedForSend
 
     override fun isFinished(): Boolean = !hasMoreFrames()
 }
