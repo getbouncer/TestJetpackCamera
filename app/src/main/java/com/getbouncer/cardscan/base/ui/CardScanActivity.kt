@@ -49,7 +49,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         get() = Dispatchers.Default
 
     private var lastWrongCard: ClockMark? = null
-    private val showWrongDuration = 0.5.seconds
+    private val showWrongDuration = 1.seconds
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
