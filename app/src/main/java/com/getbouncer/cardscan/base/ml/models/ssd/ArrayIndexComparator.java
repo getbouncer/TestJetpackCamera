@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.ml.models.legacy.ssd;
+package com.getbouncer.cardscan.base.ml.models.ssd;
 
 
 import java.util.Comparator;

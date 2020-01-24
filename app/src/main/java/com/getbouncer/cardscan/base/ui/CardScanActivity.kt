@@ -4,8 +4,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.util.Log
 import android.util.Size
+import android.view.View
 import android.view.ViewGroup
 import androidx.camera.core.CameraX
 import androidx.camera.core.ImageAnalysis
@@ -16,16 +16,18 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.getbouncer.cardscan.base.R
 import com.getbouncer.cardscan.base.camera.CardImageAnalysisAdapter
-import com.getbouncer.cardscan.base.config.TEST_CARD
-import com.getbouncer.cardscan.base.domain.CardNumber
-import com.getbouncer.cardscan.base.domain.ScanImage
+import com.getbouncer.cardscan.base.config.IS_DEBUG
+import com.getbouncer.cardscan.base.config.TEST_CARD_EXPIRY
+import com.getbouncer.cardscan.base.config.TEST_CARD_NUMBER
 import com.getbouncer.cardscan.base.domain.CardOcrResult
+import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.ml.AggregateResultListener
 import com.getbouncer.cardscan.base.ml.CardImageOcrResultAggregator
 import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
 import com.getbouncer.cardscan.base.ml.Rate
 import com.getbouncer.cardscan.base.ml.ResultAggregatorConfig
-import com.getbouncer.cardscan.base.ml.models.SSDOcrModel
+import com.getbouncer.cardscan.base.ml.models.SSDOcr
+import com.getbouncer.cardscan.base.util.CreditCardUtils
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -77,24 +79,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     }
 
     private fun startCamera() {
-        val resultAggregatorConfig = ResultAggregatorConfig.Builder()
-            .withMaxTotalAggregationTime(10.seconds)
-            .withTrackFrameRate(true)
-            .build()
-        val mainLoop = MemoryBoundAnalyzerLoop(
-            analyzerFactory = SSDOcrModel.Factory(this),
-            resultHandler = CardImageOcrResultAggregator(
-                config = resultAggregatorConfig,
-                listener = this,
-                requiredAgreementCount = 5,
-                requiredCard = TEST_CARD
-            ),
-            coroutineScope = this
-        )
-        val previewSize = Size(texture.width, texture.height)
-        val cardFinder = viewFinder.getCardFinderRectangle()
-        val mainLoopAdapter = CardImageAnalysisAdapter(previewSize, cardFinder, mainLoop)
-        mainLoop.start()
+        val mainLoopAdapter = launchMainLoop()
 
         val imageAnalysisConfig = ImageAnalysisConfig.Builder()
             .setLensFacing(CameraX.LensFacing.BACK)
@@ -103,6 +88,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
 
         imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), mainLoopAdapter)
 
+        val previewSize = Size(texture.width, texture.height)
         val previewConfig: PreviewConfig = PreviewConfig.Builder()
             .setLensFacing(CameraX.LensFacing.BACK)
             .setTargetResolution(previewSize)
@@ -112,6 +98,42 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
 
         CameraX.bindToLifecycle(this, preview)
         CameraX.bindToLifecycle(this, imageAnalysis)
+    }
+
+    private fun launchMainLoop(): ImageAnalysis.Analyzer {
+        val resultAggregatorConfig = ResultAggregatorConfig.Builder()
+            .withMaxTotalAggregationTime(10.seconds)
+            .withTrackFrameRate(true)
+            .build()
+        val mainLoop = MemoryBoundAnalyzerLoop(
+            analyzerFactory = SSDOcr.Factory(this),
+            resultHandler = CardImageOcrResultAggregator(
+                config = resultAggregatorConfig,
+                listener = this,
+                requiredCardNumber = TEST_CARD_NUMBER,
+                requiredCardExpiry = TEST_CARD_EXPIRY
+            ),
+            coroutineScope = this
+        )
+        val previewSize = Size(texture.width, texture.height)
+        val cardFinder = viewFinder.getCardFinderRectangle()
+        mainLoop.start()
+        return CardImageAnalysisAdapter(previewSize, cardFinder, mainLoop)
+    }
+
+    private fun launchCompletionLoop(frames: Collection<ScanImage>) {
+//        val completionLoop = FiniteAnalyzerLoop(
+//            frames = frames,
+//            analyzerFactory = SSDOcr.Factory(this),
+//            resultHandler = object : ResultHandler<ScanImage, CardOcrResult> {
+//                override fun onResult(result: CardOcrResult, data: ScanImage) {
+//                    Log.d("BOUNCER", "COMPLETION LOOP HANDLING RESULT")
+//                }
+//            },
+//            coroutineScope = this
+//        )
+//        completionLoop.start()
+//        return completionLoop
     }
 
     /**
@@ -133,50 +155,82 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     override fun onResult(result: CardOcrResult, frames: Map<String, List<ScanImage>>) = runOnUiThread {
         val number = result.number
         val expiry = result.expiry
-        text.text = "${number?.number ?: "____"} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}"
-        Log.i("RESULT", "SCANNING ${number?.number ?: "____"} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}")
+
+        if (number != null) {
+            cardNumber.visibility = View.VISIBLE
+            cardNumber.text = CreditCardUtils.formatNumberForDisplay(number.number)
+        }
+
+        if (expiry != null) {
+            cardExpiry.visibility = View.VISIBLE
+            cardExpiry.text = CreditCardUtils.formatExpiryForDisplay(expiry.day, expiry.month, expiry.year)
+        }
+
+        val framesWithNumbers = frames[CardImageOcrResultAggregator.FRAME_TYPE_VALID_NUMBER]
+        if (framesWithNumbers != null) {
+            launchCompletionLoop(framesWithNumbers)
+        }
     }
 
     override fun onInterimResult(result: CardOcrResult, frame: ScanImage) = runOnUiThread {
         val number = result.number
-        val expiry = result.expiry
-        debugBitmap.setImageBitmap(frame.ocrImage)
+
+        if (IS_DEBUG) {
+            debugBitmap.visibility = View.VISIBLE
+            debugBitmap.setImageBitmap(frame.ocrImage)
+        }
+
         viewFinder.setState(ViewFinderOverlay.State.FOUND)
+
         if (number != null) {
-            text.text = "${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}"
-            Log.i("RESULT",
-                "SCANNING ${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year
-                    ?: "00"}"
-            )
+            cardNumber.visibility = View.VISIBLE
+            cardNumber.text = CreditCardUtils.formatNumberForDisplay(number.number)
         }
     }
 
     override fun onInvalidResult(result: CardOcrResult, frame: ScanImage, haveSeenValidResult: Boolean) = runOnUiThread {
-        debugBitmap.setImageBitmap(frame.ocrImage)
-        if (result.number != null) {
+        val number = result.number
+
+        if (IS_DEBUG) {
+            debugBitmap.visibility = View.VISIBLE
+            debugBitmap.setImageBitmap(frame.ocrImage)
+        }
+
+        if (number != null) {
+            cardNumber.visibility = View.VISIBLE
+            cardNumber.text = CreditCardUtils.formatNumberForDisplay(number.number)
+
             lastWrongCard = MonoClock.markNow()
-            viewFinder.setState(ViewFinderOverlay.State.WRONG)
+            cardNumber.visibility = View.VISIBLE
+            if (viewFinder.getState() == ViewFinderOverlay.State.SCANNING) {
+                viewFinder.setState(ViewFinderOverlay.State.WRONG)
+            }
         } else {
             val lastWrongCard = this.lastWrongCard
-            if (lastWrongCard == null || lastWrongCard.elapsedNow() > showWrongDuration && viewFinder.getState() != ViewFinderOverlay.State.FOUND) {
+            if (lastWrongCard == null || lastWrongCard.elapsedNow() > showWrongDuration && viewFinder.getState() == ViewFinderOverlay.State.WRONG) {
                 viewFinder.setState(ViewFinderOverlay.State.SCANNING)
+                cardNumber.visibility = View.INVISIBLE
             }
         }
     }
 
     override fun onUpdateProcessingRate(overallRate: Rate, instantRate: Rate) = runOnUiThread {
-        val overallFps = if (overallRate.duration != Duration.ZERO) {
-            overallRate.amount / overallRate.duration.inSeconds
-        } else {
-            0.0
-        }
+        if (IS_DEBUG) {
+            framerate.visibility = View.VISIBLE
 
-        val instantFps = if (instantRate.duration != Duration.ZERO) {
-            instantRate.amount / instantRate.duration.inSeconds
-        } else {
-            0.0
-        }
+            val overallFps = if (overallRate.duration != Duration.ZERO) {
+                overallRate.amount / overallRate.duration.inSeconds
+            } else {
+                0.0
+            }
 
-        framerate.text = "FR: avg=$overallFps, inst=$instantFps"
+            val instantFps = if (instantRate.duration != Duration.ZERO) {
+                instantRate.amount / instantRate.duration.inSeconds
+            } else {
+                0.0
+            }
+
+            framerate.text = "FR: avg=$overallFps, inst=$instantFps"
+        }
     }
 }

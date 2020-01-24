@@ -1,5 +1,6 @@
 <resources>
-    <string name="app_name">TestJetpackCamera</string>
+    <string name="app_name">CardScan</string>
 
     <string name="card_preview_description">card scanning window</string>
+    <string name="card_debug_description">card debug window</string>
 </resources>

@@ -25,6 +25,24 @@
         <item name="cardScanOutlineWidth">@dimen/cardScanOutlineWidth</item>
     </style>
 
+    <style name="CardScanCardNumberLarge"/>
+
+    <style name="CardScanCardNumberLarge.Default">
+        <item name="android:textColor">?colorPrimary</item>
+        <item name="android:textSize">@dimen/cardScanNumberTextSize</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="CardScanExpiryLarge"/>
+
+    <style name="CardScanExpiryLarge.Default">
+        <item name="android:textColor">?colorPrimary</item>
+        <item name="android:textSize">@dimen/cardScanExpiryTextSize</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+
+
     <attr name="cardScanScanningBackgroundColor" format="color" />
     <attr name="cardScanScanningOutlineColor" format="color" />
     <attr name="cardScanScanningCornerColor" format="color" />

@@ -7,4 +7,7 @@
     <dimen name="cardScanCornerLength">24dp</dimen>
     <dimen name="cardScanCornerRadius">12dp</dimen>
 
+    <dimen name="cardScanNumberTextSize">20sp</dimen>
+    <dimen name="cardScanExpiryTextSize">16sp</dimen>
+
 </resources>

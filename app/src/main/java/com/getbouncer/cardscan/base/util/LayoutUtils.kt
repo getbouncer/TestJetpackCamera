@@ -2,6 +2,7 @@ package com.getbouncer.cardscan.base.util
 
 import android.graphics.Point
 import android.graphics.Rect
+import android.graphics.RectF
 import android.util.Rational
 import android.util.Size
 import kotlin.math.max

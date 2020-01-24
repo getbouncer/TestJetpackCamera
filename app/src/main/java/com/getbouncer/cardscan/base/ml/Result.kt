@@ -1,10 +1,8 @@
 package com.getbouncer.cardscan.base.ml
 
-import android.os.Handler
-import android.os.Looper
 import com.getbouncer.cardscan.base.domain.CardExpiry
-import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.domain.CardNumber
+import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.util.CreditCardUtils
 import java.util.LinkedList
@@ -28,7 +26,7 @@ interface ResultHandler<Input, Output> {
 data class Rate(val amount: Long, val duration: Duration)
 
 @ExperimentalTime
-interface AggregateResultListener<DataFrame, ModelResult> {
+interface AggregateResultListener<DataFrame, Result> {
 
     /**
      * The aggregated result of a model is available.
@@ -36,7 +34,7 @@ interface AggregateResultListener<DataFrame, ModelResult> {
      * @param result: the card result from the model
      * @param frames: data frames captured during processing that can be used in the completion loop
      */
-    fun onResult(result: ModelResult, frames: Map<String, List<DataFrame>>)
+    fun onResult(result: Result, frames: Map<String, List<DataFrame>>)
 
     /**
      * An interim result is available, but the model is still processing more data frames. This is
@@ -45,13 +43,13 @@ interface AggregateResultListener<DataFrame, ModelResult> {
      * @param result: the card result from the model
      * @param frame: the data frame that produced this result.
      */
-    fun onInterimResult(result: ModelResult, frame: DataFrame)
+    fun onInterimResult(result: Result, frame: DataFrame)
 
     /**
      * An invalid result was received, but the model is still processing more data frames. This is
      * useful for displaying a debug window
      */
-    fun onInvalidResult(result: ModelResult, frame: DataFrame, haveSeenValidResult: Boolean)
+    fun onInvalidResult(result: Result, frame: DataFrame, haveSeenValidResult: Boolean)
 
     /**
      * The processing rate has been updated. This is useful for debugging and measuring performance.
@@ -162,10 +160,10 @@ data class ResultAggregatorConfig(
 }
 
 @ExperimentalTime
-abstract class ResultAggregator<DataFrame, ModelResult>(
+abstract class ResultAggregator<DataFrame, Result>(
     private val config: ResultAggregatorConfig,
-    private val listener: AggregateResultListener<DataFrame, ModelResult>
-) : FinishingResultHandler<DataFrame, ModelResult>() {
+    private val listener: AggregateResultListener<DataFrame, Result>
+) : FinishingResultHandler<DataFrame, Result>() {
 
     private var firstResultTime: ClockMark? = null
     private var firstFrameTime: ClockMark? = null
@@ -177,7 +175,7 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
     private val savedFrames = mutableMapOf<String, LinkedList<DataFrame>>()
     private val savedFramesSizeBytes = mutableMapOf<String, Int>()
 
-    override fun onResult(result: ModelResult, data: DataFrame) {
+    override fun onResult(result: Result, data: DataFrame) {
         if (!isListening()) {
             return
         }
@@ -209,7 +207,7 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
     }
 
     @Synchronized
-    fun saveFrames(result: ModelResult, data: DataFrame) {
+    fun saveFrames(result: Result, data: DataFrame) {
         val savedFrameType = getSaveFrameIdentifier(result, data)
         val typedSavedFrames = savedFrames[savedFrameType] ?: LinkedList()
 
@@ -245,12 +243,12 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
      * @param result: The result to aggregate
      * @param mustReturn: If true, this method must return a final result
      */
-    abstract fun aggregateResult(result: ModelResult, mustReturn: Boolean): ModelResult?
+    abstract fun aggregateResult(result: Result, mustReturn: Boolean): Result?
 
     /**
      * Determine if a result is valid for tracking purposes.
      */
-    abstract fun isValidResult(result: ModelResult): Boolean
+    abstract fun isValidResult(result: Result): Boolean
 
     /**
      * Determine if a data frame should be saved for future processing. Note that [result] may be
@@ -258,7 +256,7 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
      *
      * If this method returns a non-null string, the frame will be saved under that identifier.
      */
-    abstract fun getSaveFrameIdentifier(result: ModelResult, frame: DataFrame): String?
+    abstract fun getSaveFrameIdentifier(result: Result, frame: DataFrame): String?
 
     /**
      * Determine the size in memory that this data frame takes up
@@ -308,7 +306,7 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
     /**
      * Send the listener the result from this model on the main thread.
      */
-    private fun notifyOfResult(result: ModelResult, frames: Map<String, List<DataFrame>>) {
+    private fun notifyOfResult(result: Result, frames: Map<String, List<DataFrame>>) {
         stopListening()
         listener.onResult(result, frames)
     }
@@ -316,12 +314,12 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
     /**
      * Send the listener an interim result from this model on the main thread.
      */
-    private fun notifyOfInterimResult(result: ModelResult, frame: DataFrame) = listener.onInterimResult(result, frame)
+    private fun notifyOfInterimResult(result: Result, frame: DataFrame) = listener.onInterimResult(result, frame)
 
     /**
      * Send the listener an invalid result from this model on the main thread.
      */
-    private fun notifyOfInvalidResult(result: ModelResult, frame: DataFrame, haveSeenValidResult: Boolean) =
+    private fun notifyOfInvalidResult(result: Result, frame: DataFrame, haveSeenValidResult: Boolean) =
         listener.onInvalidResult(result, frame, haveSeenValidResult)
 
     /**
@@ -335,11 +333,11 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
 }
 
 /**
- * Keep track of the results from the ML models. Count the number of times the ML models send each
- * number as a result, and when the first result is received.
+ * Keep track of the results from the ML models. Count the number of times the ML models send each number as a result,
+ * and when the first result is received.
  *
- * The listener will be notified of a result once a threshold number of matching results is received
- * or the time since the first result exceeds a threshold.
+ * The [listener] will be notified of a result once [requiredAgreementCount] matching results are received or the time
+ * since the first result exceeds the [ResultAggregatorConfig.maxTotalAggregationTime].
  */
 @ExperimentalTime
 abstract class CardOcrResultAggregator<ImageFormat>(
@@ -390,12 +388,20 @@ abstract class CardOcrResultAggregator<ImageFormat>(
         }
 }
 
+/**
+ * Identify valid cards to be those with valid numbers. If a [requiredCardNumber] or [requiredCardExpiry] is provided,
+ * only matching cards are considered valid.
+ *
+ * The [listener] will be notified of a result once [requiredAgreementCount] matching results are received or the time
+ * since the first result exceeds the [ResultAggregatorConfig.maxTotalAggregationTime].
+ */
 @ExperimentalTime
 class CardImageOcrResultAggregator(
     config: ResultAggregatorConfig,
     listener: AggregateResultListener<ScanImage, CardOcrResult>,
     requiredAgreementCount: Int? = null,
-    private val requiredCard: CardOcrResult? = null
+    private val requiredCardNumber: CardNumber? = null,
+    private val requiredCardExpiry: CardExpiry? = null
 ) : CardOcrResultAggregator<ScanImage>(config, listener, requiredAgreementCount) {
 
     companion object {
@@ -404,14 +410,21 @@ class CardImageOcrResultAggregator(
     }
 
     init {
-        assert(requiredCard?.number?.number == null || CreditCardUtils.isValidCardNumber(requiredCard.number.number)) {
-            "Invalid required credit card supplied"
+        assert(
+            (requiredCardNumber == null || CreditCardUtils.isValidCardNumber(requiredCardNumber.number)) &&
+            (requiredCardExpiry == null || CreditCardUtils.isValidExpiryDate(requiredCardExpiry.day, requiredCardExpiry.month, requiredCardExpiry.year))) {
+                "Invalid required credit card supplied"
         }
     }
 
     override fun isValidResult(result: CardOcrResult): Boolean =
-        if (requiredCard != null) {
-            requiredCard == result
+        if (requiredCardNumber != null && requiredCardExpiry != null) {
+            requiredCardNumber == result.number &&
+            requiredCardExpiry == result.expiry
+        } else if (requiredCardNumber != null) {
+            requiredCardNumber == result.number
+        } else if (requiredCardExpiry != null) {
+            requiredCardExpiry == result.expiry
         } else {
             CreditCardUtils.isValidCardNumber(result.number?.number)
         }

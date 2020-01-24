@@ -1,5 +1,7 @@
 
-package com.getbouncer.cardscan.base.ml.models.legacy.ssd;
+package com.getbouncer.cardscan.base.ml.models.ssd;
+
+import com.getbouncer.cardscan.base.ml.models.ssd.ArrUtils;
 
 public class OcrPriorsGen{
 

@@ -4,7 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
 import androidx.test.platform.app.InstrumentationRegistry
 import com.getbouncer.cardscan.base.R
-import com.getbouncer.cardscan.base.ml.MLResourceModelFactory
+import com.getbouncer.cardscan.base.ml.ResourceLoader
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,7 +17,7 @@ class ModelFactoryTest {
     @Test
     @SmallTest
     fun loadModelFromResource_correct() {
-        val mappedByteBuffer = MLResourceModelFactory(appContext).loadModelFromResource(R.raw.ssdelrond0136)
+        val mappedByteBuffer = ResourceLoader(appContext).loadModelFromResource(R.raw.ssdelrond0136)
         assertEquals("File is not expected size", 3265588, mappedByteBuffer.limit())
         mappedByteBuffer.rewind()
 

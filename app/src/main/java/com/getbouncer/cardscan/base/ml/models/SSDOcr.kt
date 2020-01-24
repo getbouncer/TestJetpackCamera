@@ -10,17 +10,16 @@ import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.image.hasOpenGl31
 import com.getbouncer.cardscan.base.image.scale
 import com.getbouncer.cardscan.base.image.toRGBByteBuffer
-import com.getbouncer.cardscan.base.ml.AnalyzerFactory
-import com.getbouncer.cardscan.base.ml.MLResourceModelFactory
-import com.getbouncer.cardscan.base.ml.MLTFLResourceModel
-import com.getbouncer.cardscan.base.ml.models.legacy.ssd.ArrUtils
-import com.getbouncer.cardscan.base.ml.models.legacy.ssd.DetectedOcrBox
-import com.getbouncer.cardscan.base.ml.models.legacy.ssd.OcrPriorsGen
-import com.getbouncer.cardscan.base.ml.models.legacy.ssd.PredictionAPI
+import com.getbouncer.cardscan.base.ml.ResourceLoader
+import com.getbouncer.cardscan.base.ml.MLTensorFlowLiteAnalyzer
+import com.getbouncer.cardscan.base.ml.TFLResourceAnalyzerFactory
+import com.getbouncer.cardscan.base.ml.models.ssd.ArrUtils
+import com.getbouncer.cardscan.base.ml.models.ssd.OcrDetectionBox
+import com.getbouncer.cardscan.base.ml.models.ssd.OcrPriorsGen
+import com.getbouncer.cardscan.base.ml.models.ssd.PredictionAPI
 import com.getbouncer.cardscan.base.util.CreditCardUtils.isValidCardNumber
 import org.tensorflow.lite.Interpreter
 import java.nio.ByteBuffer
-import java.util.ArrayList
 import java.util.Hashtable
 import kotlin.math.abs
 import kotlin.time.ExperimentalTime
@@ -39,8 +38,8 @@ import kotlin.time.ExperimentalTime
  * - resultHandler: A handler for the result. Usually this is the main activity.
  */
 @ExperimentalTime
-class SSDOcrModel private constructor(factory: MLResourceModelFactory, context: Context)
-    : MLTFLResourceModel<ScanImage, Array<ByteBuffer>, CardOcrResult, Map<Int, Array<FloatArray>>>(factory) {
+class SSDOcr private constructor(interpreter: Interpreter)
+    : MLTensorFlowLiteAnalyzer<ScanImage, Array<ByteBuffer>, CardOcrResult, Map<Int, Array<FloatArray>>>(interpreter) {
 
     companion object {
         private const val IMAGE_MEAN = 127.5f
@@ -50,9 +49,6 @@ class SSDOcrModel private constructor(factory: MLResourceModelFactory, context: 
          * How tolerant this algorithm should be of aspect ratios.
          */
         private const val ASPECT_RATIO_TOLERANCE_PCT = 10
-
-        private const val USE_GPU = false
-        private const val NUM_THREADS = 1
 
         /**
          * We use the output from last two layers with feature maps 19x19 and 10x10
@@ -110,10 +106,6 @@ class SSDOcrModel private constructor(factory: MLResourceModelFactory, context: 
 
     override val logTag: String = "ssd_ocr"
     override val trainedImageSize: Size = Size(600, 375)
-    override val tfOptions: Interpreter.Options = Interpreter
-        .Options()
-        .setUseNNAPI(USE_GPU && hasOpenGl31(context))
-        .setNumThreads(NUM_THREADS)
 
     /**
      * The model reshapes all the data to 1 x [All Data Points]
@@ -182,47 +174,54 @@ class SSDOcrModel private constructor(factory: MLResourceModelFactory, context: 
             TOP_K
         )
 
-        val objectBoxes: MutableList<DetectedOcrBox> = ArrayList()
-        if (result.pickedBoxProbabilities.isNotEmpty() && result.pickedLabels.isNotEmpty()) {
-            for (i in result.pickedBoxProbabilities.indices) {
-                val ocrBox = DetectedOcrBox(
-                    result.pickedBoxes[i][0], result.pickedBoxes[i][1],
-                    result.pickedBoxes[i][2], result.pickedBoxes[i][3], result.pickedBoxProbabilities[i],
-                    data.ocrImage.width, data.ocrImage.height, result.pickedLabels[i]
+        val objectBoxes = if (result.pickedBoxProbabilities.isNotEmpty() && result.pickedLabels.isNotEmpty()) {
+            result.pickedBoxProbabilities.indices.map { i ->
+                val label = if (result.pickedLabels[i] == 10) 0 else result.pickedLabels[i]
+                OcrDetectionBox(
+                    result.pickedBoxes[i][0],
+                    result.pickedBoxes[i][1],
+                    result.pickedBoxes[i][2],
+                    result.pickedBoxes[i][3],
+                    result.pickedBoxProbabilities[i],
+                    label
                 )
-                objectBoxes.add(ocrBox)
             }
-        }
+        } else {
+            emptyList()
+        }.sorted()
 
-        objectBoxes.sort()
-        val num = StringBuilder()
-        for (box in objectBoxes) {
-            if (box.label == 10) {
-                box.label = 0
-            }
-            num.append(box.label)
-        }
-
-        val predictedNumber = num.toString()
+        val predictedNumber = objectBoxes.map { it.label }.joinToString("")
         return if (isValidCardNumber(predictedNumber)) {
-            Log.d("OCR Number passed", num.toString())
             CardOcrResult(CardNumber(predictedNumber), null)
         } else {
-            Log.d("OCR Number failed", num.toString())
             CardOcrResult(null, null)
         }
     }
 
-    override val modelFileResource: Int = R.raw.ssdelrond0136
-
     override fun executeInterpreter(
         tfInterpreter: Interpreter,
         data: Array<ByteBuffer>,
-        mlOutput: Map<Int, Array<FloatArray>>) = tfInterpreter.runForMultipleInputsOutputs(data, mlOutput)
+        mlOutput: Map<Int, Array<FloatArray>>
+    ) = tfInterpreter.runForMultipleInputsOutputs(data, mlOutput)
 
-    class Factory(private val context: Context) : AnalyzerFactory<SSDOcrModel> {
+    /**
+     * A factory for creating instances of the [SSDOcr].
+     */
+    class Factory(context: Context) : TFLResourceAnalyzerFactory<SSDOcr>(ResourceLoader(context)) {
+        companion object {
+            private const val USE_GPU = false
+            private const val NUM_THREADS = 1
+        }
+
         override val isThreadSafe: Boolean = true
 
-        override fun newInstance(): SSDOcrModel = SSDOcrModel(MLResourceModelFactory(context), context)
+        override val modelFileResource: Int = R.raw.ssdelrond0136
+
+        override val tfOptions: Interpreter.Options = Interpreter
+            .Options()
+            .setUseNNAPI(USE_GPU && hasOpenGl31(context))
+            .setNumThreads(NUM_THREADS)
+
+        override fun newInstance(): SSDOcr = SSDOcr(createInterpreter())
     }
 }

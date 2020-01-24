@@ -5,7 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.MediumTest
 import androidx.test.platform.app.InstrumentationRegistry
 import com.getbouncer.cardscan.base.domain.ScanImage
-import com.getbouncer.cardscan.base.ml.models.SSDOcrModel
+import com.getbouncer.cardscan.base.ml.models.SSDOcr
 import com.getbouncer.cardscan.base.test.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -24,7 +24,7 @@ class ModelTest {
     @MediumTest
     fun resourceModelExecution_works() {
         val bitmap = testContext.resources.getDrawable(R.drawable.ocr_card_numbers_clear, null).toBitmap()
-        val model = SSDOcrModel.Factory(appContext).newInstance()
+        val model = SSDOcr.Factory(appContext).newInstance()
 
         val prediction = model.analyze(ScanImage(fullImage = bitmap, objImage = bitmap, ocrImage = bitmap))
         assertNotNull(prediction)
@@ -37,7 +37,7 @@ class ModelTest {
     @MediumTest
     fun resourceModelExecution_worksRepeatedly() {
         val bitmap = testContext.resources.getDrawable(R.drawable.ocr_card_numbers_clear, null).toBitmap()
-        val model = SSDOcrModel.Factory(appContext).newInstance()
+        val model = SSDOcr.Factory(appContext).newInstance()
 
         val prediction1 = model.analyze(ScanImage(fullImage = bitmap, objImage = bitmap, ocrImage = bitmap))
         val prediction2 = model.analyze(ScanImage(fullImage = bitmap, objImage = bitmap, ocrImage = bitmap))
@@ -56,6 +56,6 @@ class ModelTest {
     @MediumTest
     fun resourceModelExecution_worksInParallel() {
         val bitmap = testContext.resources.getDrawable(R.drawable.ocr_card_numbers_clear, null).toBitmap()
-        val model = SSDOcrModel.Factory(appContext).newInstance()
+        val model = SSDOcr.Factory(appContext).newInstance()
     }
 }

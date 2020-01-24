@@ -38,7 +38,9 @@
         <ImageView
             android:id="@+id/debugBitmap"
             android:layout_width="128dp"
-            android:layout_height="128dp"
+            android:layout_height="205dp"
+            android:visibility="gone"
+            android:contentDescription="@string/card_debug_description"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintLeft_toLeftOf="parent" />
 
@@ -46,21 +48,33 @@
             android:id="@+id/framerate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="-1/-1"
-            android:textColor="@color/colorAccent"
+            android:textColor="?colorPrimary"
+            android:visibility="gone"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent" />
 
         <TextView
-            android:id="@+id/text"
+            android:id="@+id/cardNumber"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="card_number"
-            android:textColor="@color/colorAccent"
+            android:visibility="invisible"
+            style="@style/CardScanCardNumberLarge.Default"
+            app:layout_constraintVertical_bias="0.75"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintRight_toRightOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/cardExpiry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="invisible"
+            style="@style/CardScanCardNumberLarge.Default"
+            app:layout_constraintVertical_bias="0.75"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toRightOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/cardNumber" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

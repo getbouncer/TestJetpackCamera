@@ -226,38 +226,46 @@ object CreditCardUtils {
     }
 
     /**
-     * Checks whether or not the [expMonth] and [expYear] fields represent a valid
-     * expiration date.
+     * Checks whether or not the [expDay], [expMonth], and [expYear] fields represent a valid expiry date.
      *
      * @return `true` if valid, `false` otherwise
      */
     @JvmStatic
-    fun isValidExpirationDate(expMonth: String?, expYear: String?): Boolean =
-        isValidExpirationDate(expMonth, expYear, Calendar.getInstance())
+    fun isValidExpiryDate(expDay: String?, expMonth: String?, expYear: String?): Boolean =
+        isValidExpiryDate(asInteger(expDay), asInteger(expMonth), asInteger(expYear), Calendar.getInstance())
 
-    private fun isValidExpirationDate(
-        expMonth: String?,
-        expYear: String?,
+    private fun isValidExpiryDate(
+        expiryDay: Int?,
+        expiryMonth: Int?,
+        expiryYear: Int?,
         now: Calendar
     ): Boolean {
-        val expirationMonth = asInteger(expMonth)
-        val expirationYear = asInteger(expYear)
-        if (expirationMonth == null || !isValidExpMonth(expirationMonth)) {
+        if (expiryDay != null && !isValidExpDay(expiryDay, expiryMonth, expiryYear)) {
             return false
         }
 
-        return if (expirationYear == null || !isValidExpYear(expirationYear, now)) {
+        if (expiryMonth == null || !isValidExpMonth(expiryMonth)) {
+            return false
+        }
+
+        return if (expiryYear == null || !isValidExpYear(expiryYear, now)) {
             false
         } else {
-            !hasMonthPassed(expirationYear, expirationMonth, now)
+            !hasMonthPassed(expiryYear, expiryMonth, now)
         }
     }
 
+    /**
+     * Get the resource ID of the icon for this card's network.
+     */
     @JvmStatic
     @DrawableRes
     fun getNetworkIcon(network: CardNetwork?): Int =
         NETWORK_RESOURCE_MAP[network] ?: R.drawable.bouncer_card_unknown
 
+    /**
+     * Format the card number for display.
+     */
     @JvmStatic
     fun formatNumberForDisplay(number: String): String {
         if (number.length == LENGTH_COMMON_CARD) {
@@ -273,15 +281,16 @@ object CreditCardUtils {
     fun formatNetworkForDisplay(network: CardNetwork): String = network.displayName
 
     @JvmStatic
-    fun formatExpirationForDisplay(expMonth: String?, expYear: String?): String? {
+    fun formatExpiryForDisplay(expDay: String?, expMonth: String?, expYear: String?): String? {
         if (expMonth == null || expYear == null) {
             return null
         }
 
+        val day = if (expDay != null) "$expDay/" else ""
         val month = if (expMonth.length == 1) "0$expMonth" else expMonth
         val year = if (expYear.length == 4) expYear.substring(2) else expYear
 
-        return "$month/$year"
+        return "$day$month/$year"
     }
 
     private fun formatCommonForDisplay(number: String): String {
@@ -307,6 +316,25 @@ object CreditCardUtils {
 
         return result.toString()
     }
+
+    /**
+     * Checks whether or not the [expDay] field is valid given the [expMonth] and [expYear].
+     *
+     * @return `true` if valid, `false` otherwise.
+     */
+    private fun isValidExpDay(expDay: Int?, expMonth: Int?, expYear: Int?): Boolean = when(expMonth) {
+        null -> false
+        2 -> if (isLeapYear(expYear)) expDay in 1..29 else expDay in 1..28
+        4, 6, 9, 11 -> expDay in 1..30
+        else -> expDay in 1..31
+    }
+
+    /**
+     * Determine if a year is a leap year.
+     *
+     * @return `true` if a leap year, `false` otherwise.
+     */
+    private fun isLeapYear(year: Int?): Boolean = year != null && year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 
     /**
      * Checks whether or not the [expMonth] field is valid.
