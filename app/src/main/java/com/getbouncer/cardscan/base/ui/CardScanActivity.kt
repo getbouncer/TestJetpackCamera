@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base
+package com.getbouncer.cardscan.base.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -14,7 +14,9 @@ import androidx.camera.core.Preview
 import androidx.camera.core.PreviewConfig
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.getbouncer.cardscan.base.R
 import com.getbouncer.cardscan.base.camera.CardImageAnalysisAdapter
+import com.getbouncer.cardscan.base.domain.CardNumber
 import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.ml.AggregateResultListener
@@ -23,15 +25,16 @@ import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
 import com.getbouncer.cardscan.base.ml.Rate
 import com.getbouncer.cardscan.base.ml.ResultAggregatorConfig
 import com.getbouncer.cardscan.base.ml.models.SSDOcrModel
-import com.getbouncer.cardscan.base.util.calculateCardPreviewRect
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.ClockMark
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
+import kotlin.time.MonoClock
 import kotlin.time.seconds
 
 private const val CAMERA_PERMISSION_REQUEST_CODE = 1200
@@ -44,12 +47,17 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Default
 
+    private var lastWrongCard: ClockMark? = null
+    private val showWrongDuration = 1.seconds
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST_CODE)
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA),
+                CAMERA_PERMISSION_REQUEST_CODE
+            )
         } else {
             texture.post { startCamera() }
         }
@@ -76,12 +84,17 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
             .build()
         val mainLoop = MemoryBoundAnalyzerLoop(
             analyzerFactory = SSDOcrModel.Factory(this),
-            resultHandler = CardImageOcrResultAggregator(resultAggregatorConfig, this, 5),
+            resultHandler = CardImageOcrResultAggregator(
+                config = resultAggregatorConfig,
+                listener = this,
+                requiredAgreementCount = 5,
+                requiredCard = CardOcrResult(CardNumber("4100390064352293"), null)
+            ),
             coroutineScope = this
         )
         val previewSize = Size(texture.width, texture.height)
-        val previewCard = calculateCardPreviewRect(previewSize)
-        val mainLoopAdapter = CardImageAnalysisAdapter(previewSize, previewCard, mainLoop)
+        val cardFinder = viewFinder.getCardFinderRectangle()
+        val mainLoopAdapter = CardImageAnalysisAdapter(previewSize, cardFinder, mainLoop)
         mainLoop.start()
 
         val imageAnalysisConfig = ImageAnalysisConfig.Builder()
@@ -147,7 +160,8 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     override fun onInterimResult(result: CardOcrResult, frame: ScanImage) {
         val number = result.number
         val expiry = result.expiry
-        debug_bitmap.setImageBitmap(frame.ocrImage)
+        debugBitmap.setImageBitmap(frame.ocrImage)
+        viewFinder.setState(ViewFinderOverlay.State.FOUND)
         if (number != null) {
             text.text = "${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}"
             Log.i("RESULT", "SCANNING ${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}")
@@ -155,7 +169,16 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     }
 
     override fun onInvalidResult(result: CardOcrResult, frame: ScanImage, haveSeenValidResult: Boolean) {
-        debug_bitmap.setImageBitmap(frame.ocrImage)
+        debugBitmap.setImageBitmap(frame.ocrImage)
+        if (result.number != null) {
+            lastWrongCard = MonoClock.markNow()
+            viewFinder.setState(ViewFinderOverlay.State.WRONG)
+        } else {
+            val lastWrongCard = this.lastWrongCard
+            if (lastWrongCard == null || lastWrongCard.elapsedNow() > showWrongDuration && viewFinder.getState() != ViewFinderOverlay.State.FOUND) {
+                viewFinder.setState(ViewFinderOverlay.State.SCANNING)
+            }
+        }
     }
 
     override fun onUpdateProcessingRate(overallRate: Rate, instantRate: Rate) {

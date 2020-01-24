@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="cardScanViewFinderPadding">12dp</dimen>
+
+    <dimen name="cardScanOutlineWidth">2dp</dimen>
+    <dimen name="cardScanCornerWidth">3dp</dimen>
+    <dimen name="cardScanCornerLength">24dp</dimen>
+    <dimen name="cardScanCornerRadius">12dp</dimen>
+
+</resources>

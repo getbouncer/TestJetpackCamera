@@ -200,9 +200,11 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
             notifyOfInvalidResult(result, data, haveSeenValidResult)
         }
 
-        val finalResult = aggregateResult(result, hasReachedTimeout())
-        if (finalResult != null) {
-            notifyOfResult(finalResult, savedFrames)
+        if (haveSeenValidResult) {
+            val finalResult = aggregateResult(result, hasReachedTimeout())
+            if (finalResult != null) {
+                notifyOfResult(finalResult, savedFrames)
+            }
         }
     }
 
@@ -400,7 +402,8 @@ abstract class CardOcrResultAggregator<ImageFormat>(
 class CardImageOcrResultAggregator(
     config: ResultAggregatorConfig,
     listener: AggregateResultListener<ScanImage, CardOcrResult>,
-    requiredAgreementCount: Int? = null
+    requiredAgreementCount: Int? = null,
+    private val requiredCard: CardOcrResult? = null
 ) : CardOcrResultAggregator<ScanImage>(config, listener, requiredAgreementCount) {
 
     companion object {
@@ -408,8 +411,18 @@ class CardImageOcrResultAggregator(
         const val FRAME_TYPE_INVALID_NUMBER = "invalid_number"
     }
 
+    init {
+        assert(requiredCard?.number?.number == null || CreditCardUtils.isValidCardNumber(requiredCard.number.number)) {
+            "Invalid required credit card supplied"
+        }
+    }
+
     override fun isValidResult(result: CardOcrResult): Boolean =
-        CreditCardUtils.isValidCardNumber(result.number?.number)
+        if (requiredCard != null) {
+            requiredCard == result
+        } else {
+            CreditCardUtils.isValidCardNumber(result.number?.number)
+        }
 
     override fun getFrameSizeBytes(frame: ScanImage): Int = frame.sizeInBytes
 

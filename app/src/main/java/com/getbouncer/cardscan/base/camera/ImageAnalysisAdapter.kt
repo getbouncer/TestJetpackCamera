@@ -1,9 +1,5 @@
 package com.getbouncer.cardscan.base.camera
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
 import android.graphics.Rect
 import android.util.Size
 import androidx.camera.core.ImageAnalysis
@@ -40,32 +36,18 @@ abstract class ImageAnalysisAdapter<ImageFormat, Output>(
 @ExperimentalTime
 class CardImageAnalysisAdapter<Output>(
     private val previewSize: Size,
-    private val previewCard: Rect,
-//    private val viewFinder: Bitmap? = null,
+    private val cardFinder: Rect,
     loop: MemoryBoundAnalyzerLoop<ScanImage, Output>
 ) : ImageAnalysisAdapter<ScanImage, Output>(loop) {
 
     private val loggingTimer = Timer.newInstance("Bouncer", "Image cropping")
 
     override fun convertImageFormat(image: ImageProxy, rotationDegrees: Int): ScanImage {
-//        if (viewFinder != null) {
-//            val overlay = Bitmap.createBitmap(viewFinder.width, viewFinder.height, Bitmap.Config.ARGB_8888)
-//            val paint = Paint().apply {
-//                isAntiAlias = true
-//                style = Paint.Style.STROKE
-//                color = Color.WHITE
-//                strokeWidth = 5f
-//            }
-//
-//            val canvas = Canvas(overlay).apply { drawRect(previewCard, paint) }
-//
-//        }
-
         return loggingTimer.measure {
             val fullImage = image.toBitmap().rotate(rotationDegrees.toFloat())
             val fullImageSize = Size(fullImage.width, fullImage.height)
-            val objCrop = calculateObjectDetectionCrop(fullImageSize, previewSize, previewCard)
-            val cardCrop = calculateCardCrop(fullImageSize, previewSize, previewCard)
+            val objCrop = calculateObjectDetectionCrop(fullImageSize, previewSize, cardFinder)
+            val cardCrop = calculateCardCrop(fullImageSize, previewSize, cardFinder)
 
             ScanImage(
                 fullImage = fullImage,

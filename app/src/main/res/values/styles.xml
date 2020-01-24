@@ -6,6 +6,57 @@
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
+
+        <item name="cardScanScanningBackgroundColor">@color/cardScanScanningBackground</item>
+        <item name="cardScanScanningOutlineColor">@color/cardScanScanningOutline</item>
+        <item name="cardScanScanningCornerColor">@color/cardScanScanningCorners</item>
+
+        <item name="cardScanFoundBackgroundColor">@color/cardScanFoundBackground</item>
+        <item name="cardScanFoundOutlineColor">@color/cardScanFoundOutline</item>
+        <item name="cardScanFoundCornerColor">@color/cardScanFoundCorners</item>
+
+        <item name="cardScanWrongBackgroundColor">@color/cardScanWrongBackground</item>
+        <item name="cardScanWrongOutlineColor">@color/cardScanWrongOutline</item>
+        <item name="cardScanWrongCornerColor">@color/cardScanWrongCorners</item>
+
+        <item name="cardScanCornerLength">@dimen/cardScanCornerLength</item>
+        <item name="cardScanCornerRadius">@dimen/cardScanCornerRadius</item>
+        <item name="cardScanCornerWidth">@dimen/cardScanCornerWidth</item>
+        <item name="cardScanOutlineWidth">@dimen/cardScanOutlineWidth</item>
     </style>
+
+    <attr name="cardScanScanningBackgroundColor" format="color" />
+    <attr name="cardScanScanningOutlineColor" format="color" />
+    <attr name="cardScanScanningCornerColor" format="color" />
+
+    <attr name="cardScanFoundBackgroundColor" format="color" />
+    <attr name="cardScanFoundOutlineColor" format="color" />
+    <attr name="cardScanFoundCornerColor" format="color" />
+
+    <attr name="cardScanWrongBackgroundColor" format="color" />
+    <attr name="cardScanWrongOutlineColor" format="color" />
+    <attr name="cardScanWrongCornerColor" format="color" />
+
+    <attr name="cardScanCornerLength" format="dimension" />
+    <attr name="cardScanCornerRadius" format="dimension" />
+    <attr name="cardScanOutlineWidth" format="dimension" />
+    <attr name="cardScanCornerWidth" format="dimension" />
+
+    <declare-styleable name="ViewFinderOverlay">
+        <attr name="viewFinderPadding" format="dimension" />
+        <attr name="viewFinderVerticalWeight" format="float" />
+        <attr name="viewFinderHorizontalWeight" format="float" />
+        <attr name="viewFinderCardAspectRatio" format="fraction" />
+
+        <attr name="showBackground" format="boolean" />
+        <attr name="showCorners" format="boolean" />
+        <attr name="showOutline" format="boolean" />
+
+        <attr name="state" format="enum">
+            <enum name="scanning" value="0" />
+            <enum name="found" value="1" />
+            <enum name="wrong" value="2" />
+        </attr>
+    </declare-styleable>
 
 </resources>

@@ -3,4 +3,16 @@
     <color name="colorPrimary">#008577</color>
     <color name="colorPrimaryDark">#00574B</color>
     <color name="colorAccent">#D81B60</color>
+
+    <color name="cardScanScanningBackground">#99000000</color>
+    <color name="cardScanScanningOutline">#99444444</color>
+    <color name="cardScanScanningCorners">#FFFFFF</color>
+
+    <color name="cardScanFoundBackground">#9900AA00</color>
+    <color name="cardScanFoundOutline">#00AA00</color>
+    <color name="cardScanFoundCorners">#22FF22</color>
+
+    <color name="cardScanWrongBackground">#99AA0000</color>
+    <color name="cardScanWrongOutline">#AA0000</color>
+    <color name="cardScanWrongCorners">#FF2222</color>
 </resources>

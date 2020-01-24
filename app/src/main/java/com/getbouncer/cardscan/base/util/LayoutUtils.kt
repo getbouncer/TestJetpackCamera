@@ -1,6 +1,5 @@
 package com.getbouncer.cardscan.base.util
 
-import android.content.res.Resources
 import android.graphics.Point
 import android.graphics.Rect
 import android.util.Rational
@@ -10,37 +9,30 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * A standard credit card is 85.60mm x 53.98mm. This is close enough to a ratio of 8 x 5.
+ * A standard credit card is 85.60mm x 53.98mm.
  */
-private val STANDARD_CARD_RATIO = Rational(8, 5)
-
-/**
- * Convert DP to pixels
- */
-private fun dpToPx(dp: Int): Int = (dp * Resources.getSystem().displayMetrics.density).roundToInt()
+val STANDARD_CARD_RATIO = Rational(8560, 5398)
 
 /**
  * Calculate a rectangle where the card preview indicator should exist on the preview image.
  *
  * @param previewImage: The size of the preview image on which to place the card
- * @param minimumPaddingDp: The minimum padding in DP between the edge of the preview image and the
- *                          edge of the card crop.
- * @param verticalWeight: A float from 0 to 1 indicating where vertically the preview should be
- *                        positioned. 0 is at the top, 1 is at the bottom, 0.5 is in the middle.
- * @param horizontalWeight: A float from 0 to 1 indicating where horizontally the preview should be
- *                          positioned. 0 is at the left, 1 is at the right, 0.5 is in the middle.
- * @param cardRatio: The X/Y ratio of the card preview image. This should match the ratio of the ML
- *                   models that operate on the card.
+ * @param minimumPaddingPx: The minimum padding in pixels between the edge of the preview image and the edge of the card
+ *                          crop.
+ * @param verticalWeight: A float from 0 to 1 indicating where vertically the preview should be positioned. 0 is at the
+ *                        top, 1 is at the bottom, 0.5 is in the middle.
+ * @param horizontalWeight: A float from 0 to 1 indicating where horizontally the preview should be positioned. 0 is at
+ *                          the left, 1 is at the right, 0.5 is in the middle.
+ * @param cardRatio: The X/Y ratio of the card preview image. This should match the ratio of the ML models that operate
+ *                   on the card.
  */
-fun calculateCardPreviewRect(
+fun calculateCardFinderRect(
     previewImage: Size,
-    minimumPaddingDp: Int = 0,
+    minimumPaddingPx: Int = 0,
     verticalWeight: Float = 0.5F,
     horizontalWeight: Float = 0.5F,
-    cardRatio: Rational = STANDARD_CARD_RATIO
+    cardRatio: Float = STANDARD_CARD_RATIO.toFloat()
 ): Rect {
-    val minimumPaddingPx =
-        dpToPx(minimumPaddingDp)
 
     // calculate the actual available size of the image given the padding requirements.
     val paddedSize = Size(
@@ -76,21 +68,26 @@ fun calculateCardPreviewRect(
 }
 
 /**
- * Determine the maximum size of rectangle with a given aspect ratio (X/Y) that can fit inside the
- * specified area.
+ * Determine the maximum size of rectangle with a given aspect ratio (X/Y) that can fit inside the specified area.
  */
-private fun maxAspectRatioInSize(area: Size, aspectRatio: Rational): Size {
+private fun maxAspectRatioInSize(area: Size, aspectRatio: Float): Size {
     var width = area.width
-    var height = (width / (aspectRatio.toFloat())).roundToInt()
+    var height = (width / (aspectRatio)).roundToInt()
 
     return if (height <= area.height) {
         Size(area.width, height)
     } else {
         height = area.height
-        width = (height * (aspectRatio.toFloat())).roundToInt()
+        width = (height * (aspectRatio)).roundToInt()
         Size(min(width, area.width), height)
     }
 }
+
+/**
+ * Determine the maximum size of rectangle with a given aspect ratio (X/Y) that can fit inside the specified area.
+ */
+private fun maxAspectRatioInSize(area: Size, aspectRatio: Rational): Size =
+    maxAspectRatioInSize(area, aspectRatio.toFloat())
 
 /**
  * Calculate the position of the [previewImage] within the [fullImage]. This makes a few
@@ -121,77 +118,83 @@ private fun scaleAndPositionPreviewImage(fullImage: Size, previewImage: Size): R
 }
 
 /**
- * Calculate the crop from the [fullImage] for the credit card based on the [previewCard] within
- * the [previewImage].
+ * Calculate the crop from the [fullImage] for the credit card based on the [cardFinder] within the [previewImage].
  *
  * Note: This algorithm makes some assumptions:
  * 1. the previewImage and the fullImage are centered relative to each other.
- * 2. the fullImage circumscribes the previewImage. I.E. they share at least one dimension, and the
- *    previewImage is smaller than or the same size as the fullImage
+ * 2. the fullImage circumscribes the previewImage. I.E. they share at least one field of view, and the previewImage's
+ *    fields of view are smaller than or the same size as the fullImage's
  * 3. the fullImage and the previewImage have the same orientation
  */
-fun calculateCardCrop(fullImage: Size, previewImage: Size, previewCard: Rect): Rect {
-    assert(previewCard.left >= 0
-            && previewCard.right <= previewImage.width
-            && previewCard.top >= 0
-            && previewCard.bottom <= previewImage.height
-    ) { "Preview card is outside preview image bounds" }
+fun calculateCardCrop(fullImage: Size, previewImage: Size, cardFinder: Rect): Rect {
+    assert(cardFinder.left >= 0
+            && cardFinder.right <= previewImage.width
+            && cardFinder.top >= 0
+            && cardFinder.bottom <= previewImage.height
+    ) { "Card finder is outside preview image bounds" }
 
     // Scale the previewImage to match the fullImage
     val scaledPreviewImage = scaleAndPositionPreviewImage(fullImage, previewImage)
     val previewScale = scaledPreviewImage.width().toFloat() / previewImage.width
 
-    // Scale the previewCard to match the scaledPreviewImage
-    val scaledPreviewCard = Rect(
-        (previewCard.left * previewScale).roundToInt(),
-        (previewCard.top * previewScale).roundToInt(),
-        (previewCard.right * previewScale).roundToInt(),
-        (previewCard.bottom * previewScale).roundToInt()
+    // Scale the cardFinder to match the scaledPreviewImage
+    val scaledCardFinder = Rect(
+        (cardFinder.left * previewScale).roundToInt(),
+        (cardFinder.top * previewScale).roundToInt(),
+        (cardFinder.right * previewScale).roundToInt(),
+        (cardFinder.bottom * previewScale).roundToInt()
     )
 
-    // Position the scaledPreviewCard on the fullImage
+    // Position the scaledCardFinder on the fullImage
     return Rect(
-        scaledPreviewCard.left + scaledPreviewImage.left,
-        scaledPreviewCard.top + scaledPreviewImage.top,
-        scaledPreviewCard.right + scaledPreviewImage.left,
-        scaledPreviewCard.bottom + scaledPreviewImage.top
+        scaledCardFinder.left + scaledPreviewImage.left,
+        scaledCardFinder.top + scaledPreviewImage.top,
+        scaledCardFinder.right + scaledPreviewImage.left,
+        scaledCardFinder.bottom + scaledPreviewImage.top
     )
 }
 
-private fun calculateObjectDetectionFromPreviewCard(previewImage: Size, previewCard: Rect ): Rect =
-    if (previewCard.width() > previewCard.height()) {
+/**
+ * Given a card finder region of a preview image, calculate the associated object detection square.
+ */
+private fun calculateObjectDetectionFromCardFinder(previewImage: Size, cardFinder: Rect): Rect =
+    if (cardFinder.width() > cardFinder.height()) {
         val objectDetectionSquareTop =
-            max(0, previewCard.top + previewCard.height() / 2 - previewCard.width() / 2)
+            max(0, cardFinder.top + cardFinder.height() / 2 - cardFinder.width() / 2)
         val objectDetectionSquareBottom =
-            min(previewImage.height, objectDetectionSquareTop + previewCard.width())
+            min(previewImage.height, objectDetectionSquareTop + cardFinder.width())
         Rect(
-            /* left */ previewCard.left,
+            /* left */ cardFinder.left,
             /* top */ objectDetectionSquareTop,
-            /* right */ previewCard.right,
+            /* right */ cardFinder.right,
             /* bottom */ objectDetectionSquareBottom
         )
     } else {
         val objectDetectionSquareLeft =
-            max(0, previewCard.left + previewCard.width() / 2 - previewCard.height() / 2)
+            max(0, cardFinder.left + cardFinder.width() / 2 - cardFinder.height() / 2)
         val objectDetectionSquareRight =
-            min(previewImage.width, objectDetectionSquareLeft + previewCard.height())
+            min(previewImage.width, objectDetectionSquareLeft + cardFinder.height())
         Rect(
             /* left */ objectDetectionSquareLeft,
-            /* top */ previewCard.top,
+            /* top */ cardFinder.top,
             /* right */ objectDetectionSquareRight,
-            /* bottom */ previewCard.bottom
+            /* bottom */ cardFinder.bottom
         )
     }
 
-fun calculateObjectDetectionCrop(fullImage: Size, previewImage: Size, previewCard: Rect): Rect {
-    assert(previewCard.left >= 0
-            && previewCard.right <= previewImage.width
-            && previewCard.top >= 0
-            && previewCard.bottom <= previewImage.height
-    ) { "Preview card is outside preview image bounds" }
+/**
+ * Calculate what portion of the full image should be cropped for object detection based on the position of card finder
+ * within the preview image.
+ */
+fun calculateObjectDetectionCrop(fullImage: Size, previewImage: Size, cardFinder: Rect): Rect {
+    assert(cardFinder.left >= 0
+            && cardFinder.right <= previewImage.width
+            && cardFinder.top >= 0
+            && cardFinder.bottom <= previewImage.height
+    ) { "Card finder is outside preview image bounds" }
 
-    // Calculate the object detection square based on the previewCard, limited by the preview
-    val objectDetectionSquare = calculateObjectDetectionFromPreviewCard(previewImage, previewCard)
+    // Calculate the object detection square based on the card finder, limited by the preview
+    val objectDetectionSquare = calculateObjectDetectionFromCardFinder(previewImage, cardFinder)
 
     val scaledPreviewImage = scaleAndPositionPreviewImage(fullImage, previewImage)
     val previewScale = scaledPreviewImage.width().toFloat() / previewImage.width
@@ -210,21 +213,5 @@ fun calculateObjectDetectionCrop(fullImage: Size, previewImage: Size, previewCar
         scaledObjectDetectionSquare.top + scaledPreviewImage.top,
         scaledObjectDetectionSquare.right + scaledPreviewImage.left,
         scaledObjectDetectionSquare.bottom + scaledPreviewImage.top
-    )
-}
-
-/**
-* Find the largest ratio crop that fits in the full image
-*/
-fun calculateScreenDetectionCrop(fullImage: Size, requiredRatio: Rational): Rect {
-    val maximumSize = maxAspectRatioInSize(fullImage, requiredRatio)
-    val offsetLeft = (fullImage.width - maximumSize.width) / 2
-    val offsetTop = (fullImage.height - maximumSize.height) / 2
-
-    return Rect(
-        /* left */ offsetLeft,
-        /* top */ offsetTop,
-        /* right */ offsetLeft + maximumSize.width,
-        /* bottom */ offsetTop + maximumSize.height
     )
 }
