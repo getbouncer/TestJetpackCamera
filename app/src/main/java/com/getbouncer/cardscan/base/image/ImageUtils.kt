@@ -125,4 +125,4 @@ fun Bitmap.rotate(rotationDegrees: Float): Bitmap {
 }
 
 fun Bitmap.scale(size: Size, filter: Boolean = false): Bitmap =
-    Bitmap.createScaledBitmap(this, size.width, size.height, filter).apply { this.config = this@scale.config }
+    Bitmap.createScaledBitmap(this, size.width, size.height, filter)

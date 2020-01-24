@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.util.Log
 import android.util.Size
 import android.view.View
 import android.view.ViewGroup
@@ -17,7 +18,6 @@ import androidx.core.content.ContextCompat
 import com.getbouncer.cardscan.base.R
 import com.getbouncer.cardscan.base.camera.CardImageAnalysisAdapter
 import com.getbouncer.cardscan.base.config.IS_DEBUG
-import com.getbouncer.cardscan.base.config.TEST_CARD_EXPIRY
 import com.getbouncer.cardscan.base.config.TEST_CARD_NUMBER
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.domain.ScanImage
@@ -82,6 +82,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         val mainLoopAdapter = launchMainLoop()
 
         val imageAnalysisConfig = ImageAnalysisConfig.Builder()
+            .setTargetResolution(Size(1280, 720))
             .setLensFacing(CameraX.LensFacing.BACK)
             .build()
         val imageAnalysis = ImageAnalysis(imageAnalysisConfig)
@@ -102,7 +103,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
 
     private fun launchMainLoop(): ImageAnalysis.Analyzer {
         val resultAggregatorConfig = ResultAggregatorConfig.Builder()
-            .withMaxTotalAggregationTime(10.seconds)
+            .withMaxTotalAggregationTime(2.seconds)
             .withTrackFrameRate(true)
             .build()
         val mainLoop = MemoryBoundAnalyzerLoop(
@@ -111,7 +112,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
                 config = resultAggregatorConfig,
                 listener = this,
                 requiredCardNumber = TEST_CARD_NUMBER,
-                requiredCardExpiry = TEST_CARD_EXPIRY
+                requiredAgreementCount = 10
             ),
             coroutineScope = this
         )
@@ -170,22 +171,19 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         if (framesWithNumbers != null) {
             launchCompletionLoop(framesWithNumbers)
         }
+
+        Log.d("AGW", "CAPTURED ${framesWithNumbers?.size ?: 0} frames with numbers, and ${frames[CardImageOcrResultAggregator.FRAME_TYPE_INVALID_NUMBER]?.size ?: 0} frames without numbers")
     }
 
     override fun onInterimResult(result: CardOcrResult, frame: ScanImage) = runOnUiThread {
-        val number = result.number
-
         if (IS_DEBUG) {
             debugBitmap.visibility = View.VISIBLE
             debugBitmap.setImageBitmap(frame.ocrImage)
+            debugOverlay.visibility = View.VISIBLE
+            debugOverlay.setBoxes(result.number?.boxes)
         }
 
         viewFinder.setState(ViewFinderOverlay.State.FOUND)
-
-        if (number != null) {
-            cardNumber.visibility = View.VISIBLE
-            cardNumber.text = CreditCardUtils.formatNumberForDisplay(number.number)
-        }
     }
 
     override fun onInvalidResult(result: CardOcrResult, frame: ScanImage, haveSeenValidResult: Boolean) = runOnUiThread {
@@ -194,6 +192,8 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         if (IS_DEBUG) {
             debugBitmap.visibility = View.VISIBLE
             debugBitmap.setImageBitmap(frame.ocrImage)
+            debugOverlay.visibility = View.VISIBLE
+            debugOverlay.setBoxes(result.number?.boxes)
         }
 
         if (number != null) {
@@ -207,7 +207,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
             }
         } else {
             val lastWrongCard = this.lastWrongCard
-            if (lastWrongCard == null || lastWrongCard.elapsedNow() > showWrongDuration && viewFinder.getState() == ViewFinderOverlay.State.WRONG) {
+            if (viewFinder.getState() == ViewFinderOverlay.State.WRONG && (lastWrongCard == null || lastWrongCard.elapsedNow() > showWrongDuration)) {
                 viewFinder.setState(ViewFinderOverlay.State.SCANNING)
                 cardNumber.visibility = View.INVISIBLE
             }

@@ -1,5 +1,6 @@
 package com.getbouncer.cardscan.base.ml
 
+import android.util.Log
 import com.getbouncer.cardscan.base.domain.CardExpiry
 import com.getbouncer.cardscan.base.domain.CardNumber
 import com.getbouncer.cardscan.base.domain.ScanImage
@@ -198,11 +199,9 @@ abstract class ResultAggregator<DataFrame, Result>(
             notifyOfInvalidResult(result, data, haveSeenValidResult)
         }
 
-        if (haveSeenValidResult) {
-            val finalResult = aggregateResult(result, hasReachedTimeout())
-            if (finalResult != null) {
-                notifyOfResult(finalResult, savedFrames)
-            }
+        val finalResult = aggregateResult(result, hasReachedTimeout())
+        if (finalResult != null) {
+            notifyOfResult(finalResult, savedFrames)
         }
     }
 
@@ -234,6 +233,7 @@ abstract class ResultAggregator<DataFrame, Result>(
 
             savedFramesSizeBytes[savedFrameType] = typedSizeBytes
             typedSavedFrames.add(data)
+            savedFrames[savedFrameType] = typedSavedFrames
         }
     }
 
@@ -350,8 +350,10 @@ abstract class CardOcrResultAggregator<ImageFormat>(
     private val expiryResults = mutableMapOf<CardExpiry, Int>()
 
     override fun aggregateResult(result: CardOcrResult, mustReturn: Boolean): CardOcrResult? {
-        val numberCount = storeNumber(result.number)
-        storeExpiry(result.expiry)
+        val numberCount = if (isValidResult(result)) {
+            storeExpiry(result.expiry)
+            storeNumber(result.number)
+        } else 0
 
         val hasMetRequiredAgreementCount =
             if (requiredAgreementCount != null) numberCount >= requiredAgreementCount else false
@@ -389,8 +391,8 @@ abstract class CardOcrResultAggregator<ImageFormat>(
 }
 
 /**
- * Identify valid cards to be those with valid numbers. If a [requiredCardNumber] or [requiredCardExpiry] is provided,
- * only matching cards are considered valid.
+ * Identify valid cards to be those with valid numbers. If a [requiredCardNumber] is provided, only matching cards are
+ * considered valid.
  *
  * The [listener] will be notified of a result once [requiredAgreementCount] matching results are received or the time
  * since the first result exceeds the [ResultAggregatorConfig.maxTotalAggregationTime].
@@ -400,8 +402,7 @@ class CardImageOcrResultAggregator(
     config: ResultAggregatorConfig,
     listener: AggregateResultListener<ScanImage, CardOcrResult>,
     requiredAgreementCount: Int? = null,
-    private val requiredCardNumber: CardNumber? = null,
-    private val requiredCardExpiry: CardExpiry? = null
+    private val requiredCardNumber: String? = null
 ) : CardOcrResultAggregator<ScanImage>(config, listener, requiredAgreementCount) {
 
     companion object {
@@ -410,21 +411,14 @@ class CardImageOcrResultAggregator(
     }
 
     init {
-        assert(
-            (requiredCardNumber == null || CreditCardUtils.isValidCardNumber(requiredCardNumber.number)) &&
-            (requiredCardExpiry == null || CreditCardUtils.isValidExpiryDate(requiredCardExpiry.day, requiredCardExpiry.month, requiredCardExpiry.year))) {
-                "Invalid required credit card supplied"
+        assert(requiredCardNumber == null || CreditCardUtils.isValidCardNumber(requiredCardNumber)) {
+            "Invalid required credit card supplied"
         }
     }
 
     override fun isValidResult(result: CardOcrResult): Boolean =
-        if (requiredCardNumber != null && requiredCardExpiry != null) {
-            requiredCardNumber == result.number &&
-            requiredCardExpiry == result.expiry
-        } else if (requiredCardNumber != null) {
-            requiredCardNumber == result.number
-        } else if (requiredCardExpiry != null) {
-            requiredCardExpiry == result.expiry
+        if (requiredCardNumber != null) {
+            requiredCardNumber == result.number?.number
         } else {
             CreditCardUtils.isValidCardNumber(result.number?.number)
         }

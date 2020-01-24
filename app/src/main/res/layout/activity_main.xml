@@ -44,6 +44,16 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintLeft_toLeftOf="parent" />
 
+        <com.getbouncer.cardscan.base.ui.DebugOverlay
+            android:id="@+id/debugOverlay"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone"
+            app:layout_constraintLeft_toLeftOf="@id/debugBitmap"
+            app:layout_constraintTop_toTopOf="@id/debugBitmap"
+            app:layout_constraintRight_toRightOf="@id/debugBitmap"
+            app:layout_constraintBottom_toBottomOf="@id/debugBitmap" />
+
         <TextView
             android:id="@+id/framerate"
             android:layout_width="wrap_content"

@@ -182,6 +182,7 @@ class SSDOcr private constructor(interpreter: Interpreter)
                     result.pickedBoxes[i][1],
                     result.pickedBoxes[i][2],
                     result.pickedBoxes[i][3],
+                    Size(data.ocrImage.width, data.ocrImage.height),
                     result.pickedBoxProbabilities[i],
                     label
                 )
@@ -192,7 +193,7 @@ class SSDOcr private constructor(interpreter: Interpreter)
 
         val predictedNumber = objectBoxes.map { it.label }.joinToString("")
         return if (isValidCardNumber(predictedNumber)) {
-            CardOcrResult(CardNumber(predictedNumber), null)
+            CardOcrResult(CardNumber(predictedNumber, objectBoxes), null)
         } else {
             CardOcrResult(null, null)
         }
