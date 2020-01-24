@@ -48,7 +48,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         get() = Dispatchers.Default
 
     private var lastWrongCard: ClockMark? = null
-    private val showWrongDuration = 1.seconds
+    private val showWrongDuration = 0.5.seconds
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,8 +61,6 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         } else {
             texture.post { startCamera() }
         }
-
-        texture.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateTransform() }
     }
 
     override fun onRequestPermissionsResult(
@@ -88,7 +86,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
                 config = resultAggregatorConfig,
                 listener = this,
                 requiredAgreementCount = 5,
-                requiredCard = CardOcrResult(CardNumber("4100390064352293"), null)
+                requiredCard = CardOcrResult(CardNumber("4847186095118770"), null)
             ),
             coroutineScope = this
         )
@@ -115,24 +113,6 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         CameraX.bindToLifecycle(this, imageAnalysis)
     }
 
-    private fun updateTransform() {
-//        val matrix = Matrix()
-//        val centerX = texture.width / 2f
-//        val centerY = texture.height / 2f
-//
-//        val rotationDegrees = when (texture.display.rotation) {
-//            Surface.ROTATION_0 -> 0
-//            Surface.ROTATION_90 -> 90
-//            Surface.ROTATION_180 -> 180
-//            Surface.ROTATION_270 -> 270
-//            else -> return
-//        }
-//
-//        matrix.postRotate(-rotationDegrees.toFloat(), centerX, centerY)
-//        texture.setTransform(matrix)
-
-    }
-
     /**
      * This solves the error:
      *
@@ -147,28 +127,30 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         parent.removeView(texture)
         texture.surfaceTexture = previewOutput.surfaceTexture
         parent.addView(texture, 0)
-        updateTransform()
     }
 
-    override fun onResult(result: CardOcrResult, frames: Map<String, List<ScanImage>>) {
+    override fun onResult(result: CardOcrResult, frames: Map<String, List<ScanImage>>) = runOnUiThread {
         val number = result.number
         val expiry = result.expiry
         text.text = "${number?.number ?: "____"} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}"
         Log.i("RESULT", "SCANNING ${number?.number ?: "____"} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}")
     }
 
-    override fun onInterimResult(result: CardOcrResult, frame: ScanImage) {
+    override fun onInterimResult(result: CardOcrResult, frame: ScanImage) = runOnUiThread {
         val number = result.number
         val expiry = result.expiry
         debugBitmap.setImageBitmap(frame.ocrImage)
         viewFinder.setState(ViewFinderOverlay.State.FOUND)
         if (number != null) {
             text.text = "${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}"
-            Log.i("RESULT", "SCANNING ${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year ?: "00"}")
+            Log.i("RESULT",
+                "SCANNING ${number.number} - ${expiry?.day ?: "00"}/${expiry?.month ?: "00"}/${expiry?.year
+                    ?: "00"}"
+            )
         }
     }
 
-    override fun onInvalidResult(result: CardOcrResult, frame: ScanImage, haveSeenValidResult: Boolean) {
+    override fun onInvalidResult(result: CardOcrResult, frame: ScanImage, haveSeenValidResult: Boolean) = runOnUiThread {
         debugBitmap.setImageBitmap(frame.ocrImage)
         if (result.number != null) {
             lastWrongCard = MonoClock.markNow()
@@ -181,7 +163,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         }
     }
 
-    override fun onUpdateProcessingRate(overallRate: Rate, instantRate: Rate) {
+    override fun onUpdateProcessingRate(overallRate: Rate, instantRate: Rate) = runOnUiThread {
         val overallFps = if (overallRate.duration != Duration.ZERO) {
             overallRate.amount / overallRate.duration.inSeconds
         } else {

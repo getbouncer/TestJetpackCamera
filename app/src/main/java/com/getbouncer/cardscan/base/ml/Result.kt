@@ -302,33 +302,27 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
     /**
      * Send the listener the current frame rates on the main thread.
      */
-    private fun notifyOfFrameRate(overallRate: Rate, instantRate: Rate) {
-        runOnMainThread(Runnable {
-            listener.onUpdateProcessingRate(overallRate, instantRate)
-        })
-    }
+    private fun notifyOfFrameRate(overallRate: Rate, instantRate: Rate) =
+        listener.onUpdateProcessingRate(overallRate, instantRate)
 
     /**
      * Send the listener the result from this model on the main thread.
      */
     private fun notifyOfResult(result: ModelResult, frames: Map<String, List<DataFrame>>) {
         stopListening()
-        runOnMainThread(Runnable { listener.onResult(result, frames) })
+        listener.onResult(result, frames)
     }
 
     /**
      * Send the listener an interim result from this model on the main thread.
      */
-    private fun notifyOfInterimResult(result: ModelResult, frame: DataFrame) {
-        runOnMainThread(Runnable { listener.onInterimResult(result, frame) })
-    }
+    private fun notifyOfInterimResult(result: ModelResult, frame: DataFrame) = listener.onInterimResult(result, frame)
 
     /**
      * Send the listener an invalid result from this model on the main thread.
      */
-    private fun notifyOfInvalidResult(result: ModelResult, frame: DataFrame, haveSeenValidResult: Boolean) {
-        runOnMainThread(Runnable { listener.onInvalidResult(result, frame, haveSeenValidResult) })
-    }
+    private fun notifyOfInvalidResult(result: ModelResult, frame: DataFrame, haveSeenValidResult: Boolean) =
+        listener.onInvalidResult(result, frame, haveSeenValidResult)
 
     /**
      * Determine if the timeout from the config has been reached
@@ -338,8 +332,6 @@ abstract class ResultAggregator<DataFrame, ModelResult>(
         return firstResultTime != null &&
                 firstResultTime.elapsedNow() > config.maxTotalAggregationTime
     }
-
-    private fun runOnMainThread(runnable: Runnable) = Handler(Looper.getMainLooper()).post(runnable)
 }
 
 /**
