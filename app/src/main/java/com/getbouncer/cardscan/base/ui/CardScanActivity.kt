@@ -16,6 +16,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.getbouncer.cardscan.base.R
 import com.getbouncer.cardscan.base.camera.CardImageAnalysisAdapter
+import com.getbouncer.cardscan.base.config.TEST_CARD
 import com.getbouncer.cardscan.base.domain.CardNumber
 import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.domain.CardOcrResult
@@ -86,7 +87,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
                 config = resultAggregatorConfig,
                 listener = this,
                 requiredAgreementCount = 5,
-                requiredCard = CardOcrResult(CardNumber("4847186095118770"), null)
+                requiredCard = TEST_CARD
             ),
             coroutineScope = this
         )
