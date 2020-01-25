@@ -25,7 +25,9 @@ abstract class ImageAnalysisAdapter<ImageFormat, Output>(
 ) : ImageAnalysis.Analyzer {
 
     override fun analyze(image: ImageProxy, rotationDegrees: Int) {
-        loop.enqueueFrame(convertImageFormat(image, rotationDegrees))
+        if (!loop.isFinished()) {
+            loop.enqueueFrame(convertImageFormat(image, rotationDegrees))
+        }
     }
 
     abstract fun convertImageFormat(image: ImageProxy, rotationDegrees: Int): ImageFormat
