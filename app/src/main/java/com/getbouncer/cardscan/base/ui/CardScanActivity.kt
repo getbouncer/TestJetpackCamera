@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.util.Log
 import android.util.Size
 import android.view.View
 import android.view.ViewGroup
@@ -23,9 +24,11 @@ import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.ml.AggregateResultListener
 import com.getbouncer.cardscan.base.ml.CardImageOcrResultAggregator
+import com.getbouncer.cardscan.base.ml.FiniteAnalyzerLoop
 import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
 import com.getbouncer.cardscan.base.ml.Rate
 import com.getbouncer.cardscan.base.ml.ResultAggregatorConfig
+import com.getbouncer.cardscan.base.ml.ResultHandler
 import com.getbouncer.cardscan.base.ml.models.SSDOcr
 import com.getbouncer.cardscan.base.util.CreditCardUtils
 import kotlinx.android.synthetic.main.activity_main.*
@@ -120,18 +123,17 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     }
 
     private fun launchCompletionLoop(frames: Collection<ScanImage>) {
-//        val completionLoop = FiniteAnalyzerLoop(
-//            frames = frames,
-//            analyzerFactory = SSDOcr.Factory(this),
-//            resultHandler = object : ResultHandler<ScanImage, CardOcrResult> {
-//                override fun onResult(result: CardOcrResult, data: ScanImage) {
-//                    Log.d("BOUNCER", "COMPLETION LOOP HANDLING RESULT")
-//                }
-//            },
-//            coroutineScope = this
-//        )
-//        completionLoop.start()
-//        return completionLoop
+        val completionLoop = FiniteAnalyzerLoop(
+            frames = frames,
+            analyzerFactory = SSDOcr.Factory(this),
+            resultHandler = object : ResultHandler<ScanImage, CardOcrResult> {
+                override fun onResult(result: CardOcrResult, data: ScanImage) {
+                    Log.d("BOUNCER", "COMPLETION LOOP PROCESSED FRAME $result")
+                }
+            },
+            coroutineScope = this
+        )
+        completionLoop.start()
     }
 
     /**

@@ -38,10 +38,9 @@ private val EXPECTED_MAIN_LOOP_ITERATION_TIME = 500.milliseconds
  */
 sealed class AnalyzerLoop<DataFrame, Output>(
     private val analyzerFactory: AnalyzerFactory<out Analyzer<DataFrame, Output>>,
-    private val resultHandler: ResultHandler<DataFrame, Output>,
     private val coroutineScope: CoroutineScope,
     internal val coroutineCount: Int
-) {
+) : ResultHandler<DataFrame, Output> {
     private val started = AtomicBoolean(false)
     private val channel by lazy { Channel<DataFrame>(calculateChannelBufferSize()) }
 
@@ -64,8 +63,6 @@ sealed class AnalyzerLoop<DataFrame, Output>(
             startWorker()
         }
     }
-
-    open fun onResult(result: Output, frame: DataFrame) = resultHandler.onResult(result, frame)
 
     /**
      * Launch a worker coroutine that has access to the analyzer's `analyze` method and the result handler
@@ -102,7 +99,7 @@ class MemoryBoundAnalyzerLoop<DataFrame, Output>(
     private val resultHandler: FinishingResultHandler<DataFrame, Output>,
     coroutineScope: CoroutineScope,
     coroutineCount: Int = DEFAULT_ANALYZER_PARALLEL_COUNT
-) : AnalyzerLoop<DataFrame, Output>(analyzerFactory, resultHandler, coroutineScope, coroutineCount) {
+) : AnalyzerLoop<DataFrame, Output>(analyzerFactory, coroutineScope, coroutineCount) {
 
     private var lastFrameReceivedAt: ClockMark? = null
 
@@ -121,6 +118,8 @@ class MemoryBoundAnalyzerLoop<DataFrame, Output>(
     override fun calculateChannelBufferSize(): Int = Channel.RENDEZVOUS
 
     override fun isFinished(): Boolean = !resultHandler.isListening()
+
+    override fun onResult(result: Output, data: DataFrame) = resultHandler.onResult(result, data)
 }
 
 /**
@@ -130,10 +129,10 @@ class MemoryBoundAnalyzerLoop<DataFrame, Output>(
 class FiniteAnalyzerLoop<DataFrame, Output>(
     private val frames: Collection<DataFrame>,
     analyzerFactory: AnalyzerFactory<out Analyzer<DataFrame, Output>>,
-    resultHandler: ResultHandler<DataFrame, Output>,
+    private val resultHandler: ResultHandler<DataFrame, Output>,
     coroutineScope: CoroutineScope,
     coroutineCount: Int = DEFAULT_ANALYZER_PARALLEL_COUNT
-) : AnalyzerLoop<DataFrame, Output>(analyzerFactory, resultHandler, coroutineScope, coroutineCount) {
+) : AnalyzerLoop<DataFrame, Output>(analyzerFactory, coroutineScope, coroutineCount) {
 
     private val framesProcessed: AtomicInteger = AtomicInteger(0)
 
@@ -143,9 +142,9 @@ class FiniteAnalyzerLoop<DataFrame, Output>(
 
     override fun shouldReceiveNewFrame(): Boolean = true
 
-    override fun onResult(result: Output, frame: DataFrame) {
+    override fun onResult(result: Output, data: DataFrame) {
         framesProcessed.incrementAndGet()
-        super.onResult(result, frame)
+        resultHandler.onResult(result, data)
     }
 
     override fun isFinished(): Boolean = framesProcessed.get() >= frames.size
