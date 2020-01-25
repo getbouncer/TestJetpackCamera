@@ -21,7 +21,10 @@ fun RectF.scaled(scaledSize: Size): RectF {
 
 class DebugOverlay(context: Context, attrs: AttributeSet?) : View(context, attrs) {
 
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2F
+    }
 
     private var boxes: Collection<OcrDetectionBox>? = null
 
@@ -31,10 +34,6 @@ class DebugOverlay(context: Context, attrs: AttributeSet?) : View(context, attrs
     }
 
     private fun drawBoxes(canvas: Canvas) {
-        paint.style = Paint.Style.FILL
-        paint.color = context.resources.getColor(R.color.cardScanWrongBackground)
-        canvas.drawPaint(paint)
-        paint.style = Paint.Style.STROKE
         boxes?.forEach {
             paint.color = getPaintColor(it.confidence)
             canvas.drawRect(it.scaled(Size(this.width, this.height)), paint)

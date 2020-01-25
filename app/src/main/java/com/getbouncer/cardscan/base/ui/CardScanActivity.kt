@@ -172,16 +172,12 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         if (framesWithNumbers != null) {
             launchCompletionLoop(framesWithNumbers)
         }
-
-        Log.d("AGW", "CAPTURED ${framesWithNumbers?.size ?: 0} frames with numbers, and ${frames[CardImageOcrResultAggregator.FRAME_TYPE_INVALID_NUMBER]?.size ?: 0} frames without numbers")
     }
 
     override fun onInterimResult(result: CardOcrResult, frame: ScanImage) = runOnUiThread {
         if (IS_DEBUG) {
             debugBitmap.visibility = View.VISIBLE
             debugBitmap.setImageBitmap(frame.ocrImage)
-            debugBitmap.maxWidth = frame.ocrImage.width
-            debugBitmap.maxHeight = frame.ocrImage.height
             debugOverlay.visibility = View.VISIBLE
             debugOverlay.setBoxes(result.number?.boxes)
         }
@@ -195,8 +191,6 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         if (IS_DEBUG) {
             debugBitmap.visibility = View.VISIBLE
             debugBitmap.setImageBitmap(frame.ocrImage)
-            debugBitmap.maxWidth = frame.ocrImage.width
-            debugBitmap.maxHeight = frame.ocrImage.height
             debugOverlay.visibility = View.VISIBLE
             debugOverlay.setBoxes(result.number?.boxes)
         }

@@ -37,8 +37,8 @@
 
         <ImageView
             android:id="@+id/debugBitmap"
-            android:layout_width="128dp"
-            android:layout_height="205dp"
+            android:layout_width="192dp"
+            android:layout_height="120dp"
             android:visibility="gone"
             android:contentDescription="@string/card_debug_description"
             app:layout_constraintBottom_toBottomOf="parent"
