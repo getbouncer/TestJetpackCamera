@@ -174,9 +174,8 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
 
     override fun onInterimResult(result: CardOcrResult, frame: ScanImage) = runOnUiThread {
         if (IS_DEBUG) {
-            debugBitmap.visibility = View.VISIBLE
+            debugWindow.visibility = View.VISIBLE
             debugBitmap.setImageBitmap(frame.ocrImage)
-            debugOverlay.visibility = View.VISIBLE
             debugOverlay.setBoxes(result.number?.boxes)
         }
 
@@ -191,9 +190,8 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         val number = result.number
 
         if (IS_DEBUG) {
-            debugBitmap.visibility = View.VISIBLE
+            debugWindow.visibility = View.VISIBLE
             debugBitmap.setImageBitmap(frame.ocrImage)
-            debugOverlay.visibility = View.VISIBLE
             debugOverlay.setBoxes(result.number?.boxes)
         }
 

@@ -1,91 +1,91 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout
+<androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    tools:context=".ui.CardScanActivity"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".ui.CardScanActivity" >
+    android:layout_height="match_parent" >
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <!-- camera preview and viewfinder -->
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent" >
+        android:layout_height="match_parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" >
 
-        <FrameLayout
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" >
+        <TextureView
+            android:id="@+id/texture"
+            android:layout_height="match_parent"
+            android:layout_width="match_parent" />
 
-            <TextureView
-                android:id="@+id/texture"
-                android:layout_height="match_parent"
-                android:layout_width="match_parent" />
+        <com.getbouncer.cardscan.base.ui.ViewFinderOverlay
+            android:id="@+id/viewFinder"
+            android:layout_height="match_parent"
+            android:layout_width="match_parent"
+            android:contentDescription="@string/card_preview_description"
+            app:showCorners="true"
+            app:showOutline="true"
+            app:viewFinderPadding="@dimen/cardScanViewFinderPadding" />
 
-            <com.getbouncer.cardscan.base.ui.ViewFinderOverlay
-                android:id="@+id/viewFinder"
-                android:layout_height="match_parent"
-                android:layout_width="match_parent"
-                android:contentDescription="@string/card_preview_description"
-                app:showCorners="true"
-                app:showOutline="true"
-                app:viewFinderPadding="@dimen/cardScanViewFinderPadding" />
+    </FrameLayout>
 
-        </FrameLayout>
+    <!-- debug window -->
+    <FrameLayout
+        android:id="@+id/debugWindow"
+        android:layout_width="192dp"
+        android:layout_height="120dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent" >
 
         <ImageView
             android:id="@+id/debugBitmap"
-            android:layout_width="192dp"
-            android:layout_height="120dp"
-            android:visibility="gone"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
             android:contentDescription="@string/card_debug_description"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintLeft_toLeftOf="parent" />
 
         <com.getbouncer.cardscan.base.ui.DebugOverlay
             android:id="@+id/debugOverlay"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone"
-            app:layout_constraintLeft_toLeftOf="@id/debugBitmap"
-            app:layout_constraintTop_toTopOf="@id/debugBitmap"
-            app:layout_constraintRight_toRightOf="@id/debugBitmap"
-            app:layout_constraintBottom_toBottomOf="@id/debugBitmap" />
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
 
-        <TextView
-            android:id="@+id/framerate"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="?colorPrimary"
-            android:visibility="gone"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
+    </FrameLayout>
 
-        <TextView
-            android:id="@+id/cardNumber"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:visibility="invisible"
-            style="@style/CardScanCardNumberLarge.Default"
-            app:layout_constraintVertical_bias="0.75"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintLeft_toLeftOf="parent"
-            app:layout_constraintRight_toRightOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+    <TextView
+        android:id="@+id/framerate"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="?colorPrimary"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 
-        <TextView
-            android:id="@+id/cardExpiry"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:visibility="invisible"
-            style="@style/CardScanCardNumberLarge.Default"
-            app:layout_constraintVertical_bias="0.75"
-            app:layout_constraintLeft_toLeftOf="parent"
-            app:layout_constraintRight_toRightOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/cardNumber" />
+    <TextView
+        android:id="@+id/cardNumber"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="invisible"
+        style="@style/CardScanCardNumberLarge.Default"
+        app:layout_constraintVertical_bias="0.75"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    <TextView
+        android:id="@+id/cardExpiry"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="invisible"
+        style="@style/CardScanCardNumberLarge.Default"
+        app:layout_constraintVertical_bias="0.75"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/cardNumber" />
 
-</RelativeLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
