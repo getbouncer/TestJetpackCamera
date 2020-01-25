@@ -1,6 +1,5 @@
 package com.getbouncer.cardscan.base.ml
 
-import android.util.Log
 import com.getbouncer.cardscan.base.domain.CardExpiry
 import com.getbouncer.cardscan.base.domain.CardNumber
 import com.getbouncer.cardscan.base.domain.ScanImage
@@ -214,7 +213,7 @@ abstract class ResultAggregator<DataFrame, Result>(
             val maxSavedFrames = config.maxSavedFrames[savedFrameType] ?: config.defaultMaxSavedFrames
             val storageBytes = config.frameStorageBytes[savedFrameType] ?: config.defaultFrameStorageBytes
 
-            var typedSizeBytes = savedFramesSizeBytes[savedFrameType] ?: 0 + getFrameSizeBytes(data)
+            var typedSizeBytes = (savedFramesSizeBytes[savedFrameType] ?: 0) + getFrameSizeBytes(data)
             while (storageBytes in 0 until typedSizeBytes) {
                 // saved frames is over storage limit, reduce until it's not
                 if (typedSavedFrames.size > 0) {
@@ -225,7 +224,7 @@ abstract class ResultAggregator<DataFrame, Result>(
                 }
             }
 
-            while (maxSavedFrames >= 0 && typedSavedFrames.size > maxSavedFrames) {
+            while (maxSavedFrames in 0 until typedSavedFrames.size) {
                 // saved frames is over size limit, reduce until it's not
                 val removedFrame = typedSavedFrames.removeFirst()
                 typedSizeBytes = max(0, typedSizeBytes - getFrameSizeBytes(removedFrame))

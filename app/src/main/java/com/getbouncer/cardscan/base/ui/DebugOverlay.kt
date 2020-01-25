@@ -10,23 +10,18 @@ import android.view.View
 import com.getbouncer.cardscan.base.R
 import com.getbouncer.cardscan.base.ml.models.ssd.OcrDetectionBox
 
-fun RectF.scaled(originalSize: Size, scaledSize: Size): RectF {
-    val scaleX = scaledSize.width.toFloat() / originalSize.width
-    val scaleY = scaledSize.height.toFloat() / originalSize.height
+fun RectF.scaled(scaledSize: Size): RectF {
     return RectF(
-        this.left * scaleX,
-        this.top * scaleY,
-        this.right * scaleX,
-        this.bottom * scaleY
+        this.left * scaledSize.width,
+        this.top * scaledSize.height,
+        this.right * scaledSize.width,
+        this.bottom * scaledSize.height
     )
 }
 
 class DebugOverlay(context: Context, attrs: AttributeSet?) : View(context, attrs) {
 
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 20F
-    }
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
 
     private var boxes: Collection<OcrDetectionBox>? = null
 
@@ -36,9 +31,13 @@ class DebugOverlay(context: Context, attrs: AttributeSet?) : View(context, attrs
     }
 
     private fun drawBoxes(canvas: Canvas) {
+        paint.style = Paint.Style.FILL
+        paint.color = context.resources.getColor(R.color.cardScanWrongBackground)
+        canvas.drawPaint(paint)
+        paint.style = Paint.Style.STROKE
         boxes?.forEach {
             paint.color = getPaintColor(it.confidence)
-            canvas.drawRect(it.scaled(it.imageSize, Size(this.width, this.height)), paint)
+            canvas.drawRect(it.scaled(Size(this.width, this.height)), paint)
         }
     }
 

@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import com.getbouncer.cardscan.base.R
 import com.getbouncer.cardscan.base.camera.CardImageAnalysisAdapter
 import com.getbouncer.cardscan.base.config.IS_DEBUG
+import com.getbouncer.cardscan.base.config.MEASURE_TIME
 import com.getbouncer.cardscan.base.config.TEST_CARD_NUMBER
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.domain.ScanImage
@@ -104,7 +105,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     private fun launchMainLoop(): ImageAnalysis.Analyzer {
         val resultAggregatorConfig = ResultAggregatorConfig.Builder()
             .withMaxTotalAggregationTime(2.seconds)
-            .withTrackFrameRate(true)
+            .withTrackFrameRate(IS_DEBUG && MEASURE_TIME)
             .build()
         val mainLoop = MemoryBoundAnalyzerLoop(
             analyzerFactory = SSDOcr.Factory(this),
@@ -179,6 +180,8 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         if (IS_DEBUG) {
             debugBitmap.visibility = View.VISIBLE
             debugBitmap.setImageBitmap(frame.ocrImage)
+            debugBitmap.maxWidth = frame.ocrImage.width
+            debugBitmap.maxHeight = frame.ocrImage.height
             debugOverlay.visibility = View.VISIBLE
             debugOverlay.setBoxes(result.number?.boxes)
         }
@@ -192,6 +195,8 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         if (IS_DEBUG) {
             debugBitmap.visibility = View.VISIBLE
             debugBitmap.setImageBitmap(frame.ocrImage)
+            debugBitmap.maxWidth = frame.ocrImage.width
+            debugBitmap.maxHeight = frame.ocrImage.height
             debugOverlay.visibility = View.VISIBLE
             debugOverlay.setBoxes(result.number?.boxes)
         }
@@ -215,22 +220,20 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     }
 
     override fun onUpdateProcessingRate(overallRate: Rate, instantRate: Rate) = runOnUiThread {
-        if (IS_DEBUG) {
-            framerate.visibility = View.VISIBLE
+        framerate.visibility = View.VISIBLE
 
-            val overallFps = if (overallRate.duration != Duration.ZERO) {
-                overallRate.amount / overallRate.duration.inSeconds
-            } else {
-                0.0
-            }
-
-            val instantFps = if (instantRate.duration != Duration.ZERO) {
-                instantRate.amount / instantRate.duration.inSeconds
-            } else {
-                0.0
-            }
-
-            framerate.text = "FR: avg=$overallFps, inst=$instantFps"
+        val overallFps = if (overallRate.duration != Duration.ZERO) {
+            overallRate.amount / overallRate.duration.inSeconds
+        } else {
+            0.0
         }
+
+        val instantFps = if (instantRate.duration != Duration.ZERO) {
+            instantRate.amount / instantRate.duration.inSeconds
+        } else {
+            0.0
+        }
+
+        framerate.text = "FR: avg=$overallFps, inst=$instantFps"
     }
 }

@@ -16,15 +16,12 @@ import kotlin.time.milliseconds
 private const val DEFAULT_ANALYZER_PARALLEL_COUNT = 10
 
 /**
- * This indicates the minimum time between frames that are being processed. Ideally, this would be a calculated by:
- * ```
- * duration_of_single_execution_of_analyzer / number_of_analyzers
- * ```
- *
- * Until we derive that constant, this is a limitation on the frame rate, currently capped at 20fps.
+ * This indicates the expected amount of time taken to process a single image. This, in combination with the number of
+ * analyzers running in parallel, dictates how long to delay between accepting frames on the queue for the
+ * [MemoryBoundAnalyzerLoop].
  */
 @ExperimentalTime
-private val MINIMUM_FRAME_DURATION = 50.milliseconds
+private val EXPECTED_MAIN_LOOP_ITERATION_TIME = 500.milliseconds
 
 /**
  * A loop to execute repeated analysis. The loop uses coroutines to run the [Analyzer.analyze]
@@ -41,7 +38,7 @@ sealed class AnalyzerLoop<DataFrame, Output>(
     private val analyzerFactory: AnalyzerFactory<out Analyzer<DataFrame, Output>>,
     private val resultHandler: ResultHandler<DataFrame, Output>,
     private val coroutineScope: CoroutineScope,
-    private val coroutineCount: Int
+    internal val coroutineCount: Int
 ) {
 
     private val started = AtomicBoolean(false)
@@ -114,7 +111,7 @@ class MemoryBoundAnalyzerLoop<DataFrame, Output>(
     override fun shouldReceiveNewFrame(): Boolean {
         val lastFrameReceivedAt = this.lastFrameReceivedAt
         val shouldReceiveNewFrame = !channel.isClosedForSend &&
-                (lastFrameReceivedAt == null || lastFrameReceivedAt.elapsedNow() > MINIMUM_FRAME_DURATION)
+                (lastFrameReceivedAt == null || lastFrameReceivedAt.elapsedNow() > EXPECTED_MAIN_LOOP_ITERATION_TIME / coroutineCount)
         if (shouldReceiveNewFrame) {
             this.lastFrameReceivedAt = MonoClock.markNow()
         }

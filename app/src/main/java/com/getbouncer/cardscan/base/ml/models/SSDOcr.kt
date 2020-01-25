@@ -182,7 +182,6 @@ class SSDOcr private constructor(interpreter: Interpreter)
                     result.pickedBoxes[i][1],
                     result.pickedBoxes[i][2],
                     result.pickedBoxes[i][3],
-                    Size(data.ocrImage.width, data.ocrImage.height),
                     result.pickedBoxProbabilities[i],
                     label
                 )
