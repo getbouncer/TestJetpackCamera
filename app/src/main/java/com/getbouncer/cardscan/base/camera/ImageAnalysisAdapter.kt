@@ -12,7 +12,6 @@ import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
 import com.getbouncer.cardscan.base.util.Timer
 import com.getbouncer.cardscan.base.util.calculateCardCrop
 import com.getbouncer.cardscan.base.util.calculateObjectDetectionCrop
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlin.time.ExperimentalTime
 
 /**
@@ -25,7 +24,6 @@ abstract class ImageAnalysisAdapter<ImageFormat, Output>(
     private val loop: MemoryBoundAnalyzerLoop<ImageFormat, Output>
 ) : ImageAnalysis.Analyzer {
 
-    @ExperimentalCoroutinesApi
     override fun analyze(image: ImageProxy, rotationDegrees: Int) {
         loop.enqueueFrame(convertImageFormat(image, rotationDegrees))
     }

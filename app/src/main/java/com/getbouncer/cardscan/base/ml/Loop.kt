@@ -1,10 +1,12 @@
 package com.getbouncer.cardscan.base.ml
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.ClockMark
 import kotlin.time.ExperimentalTime
 import kotlin.time.MonoClock
@@ -40,19 +42,14 @@ sealed class AnalyzerLoop<DataFrame, Output>(
     private val coroutineScope: CoroutineScope,
     internal val coroutineCount: Int
 ) {
-
     private val started = AtomicBoolean(false)
-    open val channel by lazy { Channel<DataFrame>(calculateChannelBufferSize()) }
+    private val channel by lazy { Channel<DataFrame>(calculateChannelBufferSize()) }
 
     abstract fun calculateChannelBufferSize(): Int
 
-    @ExperimentalCoroutinesApi
     fun enqueueFrame(frame: DataFrame) = if (shouldReceiveNewFrame()) { channel.offer(frame) } else false
 
     abstract fun shouldReceiveNewFrame(): Boolean
-
-    @ExperimentalCoroutinesApi
-    fun hasMoreFrames() = !channel.isEmpty
 
     fun start() {
         if (started.getAndSet(true)) {
@@ -68,15 +65,17 @@ sealed class AnalyzerLoop<DataFrame, Output>(
         }
     }
 
+    open fun onResult(result: Output, frame: DataFrame) = resultHandler.onResult(result, frame)
+
     /**
      * Launch a worker coroutine that has access to the analyzer's `analyze` method and the result handler
      */
     private fun startWorker() = coroutineScope.launch {
         val analyzer = analyzerFactory.newInstance()
         for (frame in channel) {
-            resultHandler.onResult(analyzer.analyze(frame), frame)
-            if (isFinished()) {
-                channel.close()
+            onResult(analyzer.analyze(frame), frame)
+            if (isFinished() && coroutineContext.isActive) {
+                coroutineContext.cancel()
             }
         }
     }
@@ -107,11 +106,12 @@ class MemoryBoundAnalyzerLoop<DataFrame, Output>(
 
     private var lastFrameReceivedAt: ClockMark? = null
 
-    @ExperimentalCoroutinesApi
     override fun shouldReceiveNewFrame(): Boolean {
         val lastFrameReceivedAt = this.lastFrameReceivedAt
-        val shouldReceiveNewFrame = !channel.isClosedForSend &&
-                (lastFrameReceivedAt == null || lastFrameReceivedAt.elapsedNow() > EXPECTED_MAIN_LOOP_ITERATION_TIME / coroutineCount)
+        val shouldReceiveNewFrame = !isFinished() && (
+            lastFrameReceivedAt == null ||
+            lastFrameReceivedAt.elapsedNow() > EXPECTED_MAIN_LOOP_ITERATION_TIME / coroutineCount
+        )
         if (shouldReceiveNewFrame) {
             this.lastFrameReceivedAt = MonoClock.markNow()
         }
@@ -127,7 +127,6 @@ class MemoryBoundAnalyzerLoop<DataFrame, Output>(
  * This kind of [AnalyzerLoop] will process data provided as part of its constructor. Data will be
  * processed in the order provided.
  */
-@ExperimentalCoroutinesApi
 class FiniteAnalyzerLoop<DataFrame, Output>(
     private val frames: Collection<DataFrame>,
     analyzerFactory: AnalyzerFactory<out Analyzer<DataFrame, Output>>,
@@ -136,11 +135,18 @@ class FiniteAnalyzerLoop<DataFrame, Output>(
     coroutineCount: Int = DEFAULT_ANALYZER_PARALLEL_COUNT
 ) : AnalyzerLoop<DataFrame, Output>(analyzerFactory, resultHandler, coroutineScope, coroutineCount) {
 
+    private val framesProcessed: AtomicInteger = AtomicInteger(0)
+
     init { frames.forEach { enqueueFrame(it) } }
 
     override fun calculateChannelBufferSize(): Int = frames.size
 
-    override fun shouldReceiveNewFrame(): Boolean = !channel.isClosedForSend
+    override fun shouldReceiveNewFrame(): Boolean = true
 
-    override fun isFinished(): Boolean = !hasMoreFrames()
+    override fun onResult(result: Output, frame: DataFrame) {
+        framesProcessed.incrementAndGet()
+        super.onResult(result, frame)
+    }
+
+    override fun isFinished(): Boolean = framesProcessed.get() >= frames.size
 }

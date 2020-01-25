@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.util.Log
 import android.util.Size
 import android.view.View
 import android.view.ViewGroup
@@ -32,7 +31,6 @@ import com.getbouncer.cardscan.base.util.CreditCardUtils
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.ClockMark
@@ -43,9 +41,7 @@ import kotlin.time.seconds
 
 private const val CAMERA_PERMISSION_REQUEST_CODE = 1200
 
-@ExperimentalCoroutinesApi
 @ExperimentalTime
-@ExperimentalUnsignedTypes
 class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage, CardOcrResult>, CoroutineScope {
 
     override val coroutineContext: CoroutineContext
@@ -185,7 +181,11 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         viewFinder.setState(ViewFinderOverlay.State.FOUND)
     }
 
-    override fun onInvalidResult(result: CardOcrResult, frame: ScanImage, haveSeenValidResult: Boolean) = runOnUiThread {
+    override fun onInvalidResult(
+        result: CardOcrResult,
+        frame: ScanImage,
+        haveSeenValidResult: Boolean
+    ) = runOnUiThread {
         val number = result.number
 
         if (IS_DEBUG) {
@@ -206,7 +206,8 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
             }
         } else {
             val lastWrongCard = this.lastWrongCard
-            if (viewFinder.getState() == ViewFinderOverlay.State.WRONG && (lastWrongCard == null || lastWrongCard.elapsedNow() > showWrongDuration)) {
+            if (viewFinder.getState() == ViewFinderOverlay.State.WRONG &&
+                    (lastWrongCard == null || lastWrongCard.elapsedNow() > showWrongDuration)) {
                 viewFinder.setState(ViewFinderOverlay.State.SCANNING)
                 cardNumber.visibility = View.INVISIBLE
             }
