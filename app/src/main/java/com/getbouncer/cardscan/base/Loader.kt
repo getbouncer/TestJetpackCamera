@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.ml
+package com.getbouncer.cardscan.base
 
 import android.content.Context
 import java.io.File
@@ -33,11 +33,12 @@ class ResourceLoader(private val context: Context) {
     fun loadModelFromResource(resource: Int): ByteBuffer =
         context.resources.openRawResourceFd(resource).use {
             fileDescriptor -> FileInputStream(fileDescriptor.fileDescriptor).use {
-                input -> readFileToByteBuffer(
-                    input,
-                    fileDescriptor.startOffset,
-                    fileDescriptor.declaredLength
-                )
+                input ->
+            readFileToByteBuffer(
+                input,
+                fileDescriptor.startOffset,
+                fileDescriptor.declaredLength
+            )
             }
         }
 }
@@ -61,7 +62,11 @@ class WebLoader(private val context: Context) {
             if (hashMatches(localFileName, hash)) {
                 readFileToByteBuffer(localFileName)
             } else {
-                throw HashMismatchException(HASH_ALGORITHM, hash, calculateHash(localFileName))
+                throw HashMismatchException(
+                    HASH_ALGORITHM,
+                    hash,
+                    calculateHash(localFileName)
+                )
             }
         }
 
@@ -82,7 +87,13 @@ class WebLoader(private val context: Context) {
 
     private fun readFileToByteBuffer(localFileName: String): ByteBuffer {
         val file = File(context.cacheDir, localFileName)
-        return FileInputStream(file).use { readFileToByteBuffer(it, 0, file.length()) }
+        return FileInputStream(file).use {
+            readFileToByteBuffer(
+                it,
+                0,
+                file.length()
+            )
+        }
     }
 
     @Throws(IOException::class)

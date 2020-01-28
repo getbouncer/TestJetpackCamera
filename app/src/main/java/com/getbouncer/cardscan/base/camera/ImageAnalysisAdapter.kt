@@ -8,7 +8,7 @@ import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.image.crop
 import com.getbouncer.cardscan.base.image.rotate
 import com.getbouncer.cardscan.base.image.toBitmap
-import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
+import com.getbouncer.cardscan.base.MemoryBoundAnalyzerLoop
 import com.getbouncer.cardscan.base.util.Timer
 import com.getbouncer.cardscan.base.util.calculateCardCrop
 import com.getbouncer.cardscan.base.util.calculateObjectDetectionCrop

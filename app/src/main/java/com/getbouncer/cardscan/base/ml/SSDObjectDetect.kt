@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.ml.models
+package com.getbouncer.cardscan.base.ml
 
 import android.content.Context
 import android.util.Log
@@ -7,14 +7,15 @@ import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.image.hasOpenGl31
 import com.getbouncer.cardscan.base.image.scale
 import com.getbouncer.cardscan.base.image.toRGBByteBuffer
-import com.getbouncer.cardscan.base.ml.MLTensorFlowLiteAnalyzer
-import com.getbouncer.cardscan.base.ml.TFLWebAnalyzerFactory
-import com.getbouncer.cardscan.base.ml.WebLoader
-import com.getbouncer.cardscan.base.ml.models.ssd.ArrUtils
-import com.getbouncer.cardscan.base.ml.models.ssd.DetectionBox
-import com.getbouncer.cardscan.base.ml.models.ssd.PredictionAPI
-import com.getbouncer.cardscan.base.ml.models.ssd.PriorsGen
+import com.getbouncer.cardscan.base.MLTensorFlowLiteAnalyzer
+import com.getbouncer.cardscan.base.TFLWebAnalyzerFactory
+import com.getbouncer.cardscan.base.WebLoader
+import com.getbouncer.cardscan.base.ml.ssd.ArrUtils
+import com.getbouncer.cardscan.base.ml.ssd.DetectionBox
+import com.getbouncer.cardscan.base.ml.ssd.PredictionAPI
+import com.getbouncer.cardscan.base.ml.ssd.PriorsGen
 import org.tensorflow.lite.Interpreter
+import java.io.FileNotFoundException
 import java.net.URL
 import java.nio.ByteBuffer
 import kotlin.math.abs
@@ -99,7 +100,7 @@ class SSDObjectDetect private constructor(interpreter: Interpreter)
             val targetAspectRatio = trainedImageSize.width.toDouble() / trainedImageSize.height
             if (abs(1 - aspectRatio / targetAspectRatio) * 100 > ASPECT_RATIO_TOLERANCE_PCT) {
                 Log.w(logTag, "Provided image ${Size(data.objImage.width, data.objImage.height)} is outside " +
-                        "target aspect ratio $targetAspectRatio tolerance ${ASPECT_RATIO_TOLERANCE_PCT}%")
+                        "target aspect ratio $targetAspectRatio tolerance $ASPECT_RATIO_TOLERANCE_PCT%")
             }
             arrayOf(data.objImage.scale(trainedImageSize).toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD))
         } else {
@@ -116,7 +117,10 @@ class SSDObjectDetect private constructor(interpreter: Interpreter)
             NUM_OF_PRIORS_PER_ACTIVATION,
             NUM_OF_COORDINATES
         )
-        kBoxes = ArrUtils.reshape(kBoxes, NUM_OF_PRIORS, NUM_OF_COORDINATES)
+        kBoxes = ArrUtils.reshape(kBoxes,
+            NUM_OF_PRIORS,
+            NUM_OF_COORDINATES
+        )
         kBoxes = ArrUtils.convertLocationsToBoxes(
             kBoxes,
             PRIORS,
@@ -131,7 +135,10 @@ class SSDObjectDetect private constructor(interpreter: Interpreter)
             NUM_OF_PRIORS_PER_ACTIVATION,
             NUM_OF_CLASSES
         )
-        kScores = ArrUtils.reshape(kScores, NUM_OF_PRIORS, NUM_OF_CLASSES)
+        kScores = ArrUtils.reshape(kScores,
+            NUM_OF_PRIORS,
+            NUM_OF_CLASSES
+        )
         kScores = ArrUtils.softmax2D(kScores)
 
         val result = PredictionAPI.predictionAPI(
@@ -165,9 +172,12 @@ class SSDObjectDetect private constructor(interpreter: Interpreter)
     ) = tfInterpreter.runForMultipleInputsOutputs(data, mlOutput)
 
     /**
-     * A factory for creating instances of the [SSDObjectDetect].
+     * A factory for creating instances of the [SSDObjectDetect]. This downloads the model from the web. If unable to
+     * download from the web, this will throw a [FileNotFoundException].
      */
-    class Factory(context: Context) : TFLWebAnalyzerFactory<SSDObjectDetect>(WebLoader(context)) {
+    class Factory(context: Context) : TFLWebAnalyzerFactory<SSDObjectDetect>(
+        WebLoader(context)
+    ) {
         companion object {
             private const val USE_GPU = false
             private const val NUM_THREADS = 1
@@ -177,15 +187,20 @@ class SSDObjectDetect private constructor(interpreter: Interpreter)
 
         override val url: URL = URL("https://downloads.getbouncer.com/object_detection/v0.0.2/android/ssd.tflite")
 
-        override val sha256: String = "b7331fd09bf479a20e01b77ebf1b5edbd312639edf8dd883aa7b86f4b7fbfa62"
+        override val hash: String = "b7331fd09bf479a20e01b77ebf1b5edbd312639edf8dd883aa7b86f4b7fbfa62"
 
         override val tfOptions: Interpreter.Options = Interpreter
             .Options()
             .setUseNNAPI(USE_GPU && hasOpenGl31(context))
             .setNumThreads(NUM_THREADS)
 
+        /**
+         * Pre-download the model from the web to speed up processing time later.
+         */
+        @Throws(FileNotFoundException::class)
         fun warmUp() { createInterpreter() }
 
-        override fun newInstance(): SSDObjectDetect = SSDObjectDetect(createInterpreter())
+        override fun newInstance(): SSDObjectDetect =
+            SSDObjectDetect(createInterpreter())
     }
 }

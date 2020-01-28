@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.ml
+package com.getbouncer.cardscan.base
 
 import com.getbouncer.cardscan.base.domain.CardExpiry
 import com.getbouncer.cardscan.base.domain.CardNumber
@@ -63,7 +63,8 @@ interface AggregateResultListener<DataFrame, Result> {
 /**
  * A result handler which listens until some condition is met, then terminates
  */
-abstract class FinishingResultHandler<Input, Output> : ResultHandler<Input, Output> {
+abstract class FinishingResultHandler<Input, Output> :
+    ResultHandler<Input, Output> {
     private var listening = true
 
     fun isListening(): Boolean = listening
@@ -93,13 +94,18 @@ data class ResultAggregatorConfig(
             private val DEFAULT_FRAME_RATE_UPDATE_INTERVAL = 1.seconds
         }
 
-        private var maxTotalAggregationTime: Duration = DEFAULT_MAX_TOTAL_AGGREGATION_TIME
+        private var maxTotalAggregationTime: Duration =
+            DEFAULT_MAX_TOTAL_AGGREGATION_TIME
         private var maxSavedFrames: MutableMap<String, Int> = mutableMapOf()
-        private var defaultMaxSavedFrames: Int = DEFAULT_MAX_SAVED_FRAMES
+        private var defaultMaxSavedFrames: Int =
+            DEFAULT_MAX_SAVED_FRAMES
         private var frameStorageBytes: MutableMap<String, Int> = mutableMapOf()
-        private var defaultFrameStorageBytes: Int = DEFAULT_FRAME_STORAGE_BYTES
-        private var trackFrameRate: Boolean = DEFAULT_TRACK_FRAME_RATE
-        private var frameRateUpdateInterval: Duration = DEFAULT_FRAME_RATE_UPDATE_INTERVAL
+        private var defaultFrameStorageBytes: Int =
+            DEFAULT_FRAME_STORAGE_BYTES
+        private var trackFrameRate: Boolean =
+            DEFAULT_TRACK_FRAME_RATE
+        private var frameRateUpdateInterval: Duration =
+            DEFAULT_FRAME_RATE_UPDATE_INTERVAL
 
         fun withMaxTotalAggregationTime(maxTotalAggregationTime: Duration): Builder {
             this.maxTotalAggregationTime = maxTotalAggregationTime
@@ -279,7 +285,10 @@ abstract class ResultAggregator<DataFrame, Result>(
                     Rate(totalFrames, firstFrameTime.elapsedNow())
 
                 val instantFrameRate =
-                    Rate(framesSinceLastUpdate, lastNotifyTime.elapsedNow())
+                    Rate(
+                        framesSinceLastUpdate,
+                        lastNotifyTime.elapsedNow()
+                    )
 
                 notifyOfFrameRate(totalFrameRate, instantFrameRate)
             }

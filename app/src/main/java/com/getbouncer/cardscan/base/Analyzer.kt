@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.ml
+package com.getbouncer.cardscan.base
 
 import android.util.Size
 import com.getbouncer.cardscan.base.util.Timer
@@ -11,7 +11,7 @@ import kotlin.time.ExperimentalTime
  * some form of result.
  */
 interface Analyzer<Input, Output> {
-    fun analyze(data: Input): Output
+    suspend fun analyze(data: Input): Output
 }
 
 /**
@@ -39,7 +39,7 @@ abstract class MLTensorFlowLiteAnalyzer<Input, MLInput, Output, MLOutput>(
 
     abstract fun executeInference(tfInterpreter: Interpreter, data: MLInput, mlOutput: MLOutput)
 
-    override fun analyze(data: Input): Output {
+    override suspend fun analyze(data: Input): Output {
         val mlInput = loggingTransformTimer.measure {
             transformData(data)
         }

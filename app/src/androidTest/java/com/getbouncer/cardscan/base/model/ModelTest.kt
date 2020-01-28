@@ -5,8 +5,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.MediumTest
 import androidx.test.platform.app.InstrumentationRegistry
 import com.getbouncer.cardscan.base.domain.ScanImage
-import com.getbouncer.cardscan.base.ml.models.SSDObjectDetect
-import com.getbouncer.cardscan.base.ml.models.SSDOcr
+import com.getbouncer.cardscan.base.ml.SSDObjectDetect
+import com.getbouncer.cardscan.base.ml.SSDOcr
 import com.getbouncer.cardscan.base.test.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
