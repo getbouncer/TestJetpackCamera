@@ -15,6 +15,10 @@ import com.getbouncer.cardscan.base.R
 import com.getbouncer.cardscan.base.util.STANDARD_CARD_RATIO
 import com.getbouncer.cardscan.base.util.calculateCardFinderRect
 
+/**
+ * Render a view finder overlay based on the specified theme. This was originally based on the medium post here:
+ * https://medium.com/@rgomez/android-how-to-draw-an-overlay-with-a-transparent-hole-471af6cf3953
+ */
 class ViewFinderOverlay(context: Context, attrs: AttributeSet?) : View(context, attrs) {
 
     enum class State(val value: Int) {
@@ -92,18 +96,27 @@ class ViewFinderOverlay(context: Context, attrs: AttributeSet?) : View(context, 
         }
     }
 
+    /**
+     * Draw the background with a credit-card shaped hole.
+     */
     private fun drawBackground(canvas: Canvas, cardFinderRect: RectF) {
         paintBackground.color = backgroundColor.data
         canvas.drawPaint(paintBackground)
         canvas.drawRoundRect(cardFinderRect, cornerRadius, cornerRadius, paintWindow)
     }
 
+    /**
+     * Draw an outline around the card view finder window.
+     */
     private fun drawOutline(canvas: Canvas, cardFinderRect: RectF) {
         paintOutline.color = outlineColor.data
         paintOutline.strokeWidth = outlineWidth
         canvas.drawRoundRect(cardFinderRect, cornerRadius, cornerRadius, paintOutline)
     }
 
+    /**
+     * Draw bold corners around the card view finder window.
+     */
     private fun drawCorners(canvas: Canvas, cardFinderRect: RectF) {
         paintCorner.color = cornerColor.data
         paintCorner.strokeWidth = cornerWidth
@@ -153,6 +166,9 @@ class ViewFinderOverlay(context: Context, attrs: AttributeSet?) : View(context, 
         canvas.drawLine(bottomRight.right - cornerRadius, bottomRight.bottom, bottomRight.right - cornerRadius - cornerLength, bottomRight.bottom, paintCorner)
     }
 
+    /**
+     * Determine what color the background, outline, and corners should be based on the current [state].
+     */
     private fun resolveColorValues() {
         when (state) {
             State.SCANNING -> {

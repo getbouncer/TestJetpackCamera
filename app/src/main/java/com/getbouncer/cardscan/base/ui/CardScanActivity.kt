@@ -29,11 +29,14 @@ import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
 import com.getbouncer.cardscan.base.ml.Rate
 import com.getbouncer.cardscan.base.ml.ResultAggregatorConfig
 import com.getbouncer.cardscan.base.ml.ResultHandler
+import com.getbouncer.cardscan.base.ml.models.SSDObjectDetect
 import com.getbouncer.cardscan.base.ml.models.SSDOcr
+import com.getbouncer.cardscan.base.ml.models.ssd.DetectionBox
 import com.getbouncer.cardscan.base.util.CreditCardUtils
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.ClockMark
@@ -53,6 +56,8 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     private var lastWrongCard: ClockMark? = null
     private val showWrongDuration = 1.seconds
 
+    private val objectDetectFactory = SSDObjectDetect.Factory(this)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -63,6 +68,11 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
             )
         } else {
             texture.post { startCamera() }
+        }
+
+        // Start the object detector downloading
+        launch {
+            objectDetectFactory.warmUp()
         }
     }
 
@@ -125,9 +135,9 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     private fun launchCompletionLoop(frames: Collection<ScanImage>) {
         val completionLoop = FiniteAnalyzerLoop(
             frames = frames,
-            analyzerFactory = SSDOcr.Factory(this),
-            resultHandler = object : ResultHandler<ScanImage, CardOcrResult> {
-                override fun onResult(result: CardOcrResult, data: ScanImage) {
+            analyzerFactory = objectDetectFactory,
+            resultHandler = object : ResultHandler<ScanImage, List<DetectionBox>> {
+                override fun onResult(result: List<DetectionBox>, data: ScanImage) {
                     Log.d("BOUNCER", "COMPLETION LOOP PROCESSED FRAME $result")
                 }
             },

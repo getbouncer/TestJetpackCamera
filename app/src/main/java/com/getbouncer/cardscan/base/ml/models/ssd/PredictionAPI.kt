@@ -23,6 +23,7 @@ object PredictionAPI {
         var probabilities: ArrayList<Float>
         var subsetBoxes: ArrayList<FloatArray>
         var indices: ArrayList<Int>
+
         // skip the background class
         for (classIndex in 1 until k_scores[0].size) {
             probabilities = ArrayList()

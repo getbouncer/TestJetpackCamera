@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.MediumTest
 import androidx.test.platform.app.InstrumentationRegistry
 import com.getbouncer.cardscan.base.domain.ScanImage
+import com.getbouncer.cardscan.base.ml.models.SSDObjectDetect
 import com.getbouncer.cardscan.base.ml.models.SSDOcr
 import com.getbouncer.cardscan.base.test.R
 import org.junit.Assert.assertEquals
@@ -54,8 +55,13 @@ class ModelTest {
 
     @Test
     @MediumTest
-    fun resourceModelExecution_worksInParallel() {
-        val bitmap = testContext.resources.getDrawable(R.drawable.ocr_card_numbers_clear, null).toBitmap()
-        val model = SSDOcr.Factory(appContext).newInstance()
+    fun webModelExecution_works() {
+        val bitmap = testContext.resources.getDrawable(R.drawable.obj_card_numbers_clear, null).toBitmap()
+        val model = SSDObjectDetect.Factory(appContext).newInstance()
+
+        val prediction = model.analyze(ScanImage(fullImage = bitmap, objImage = bitmap, ocrImage = bitmap))
+        assertNotNull(prediction)
+        assertEquals(0, prediction.size)
     }
+
 }

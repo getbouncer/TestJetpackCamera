@@ -8,7 +8,7 @@ import android.util.AttributeSet
 import android.util.Size
 import android.view.View
 import com.getbouncer.cardscan.base.R
-import com.getbouncer.cardscan.base.ml.models.ssd.OcrDetectionBox
+import com.getbouncer.cardscan.base.ml.models.ssd.DetectionBox
 
 fun RectF.scaled(scaledSize: Size): RectF {
     return RectF(
@@ -26,7 +26,7 @@ class DebugOverlay(context: Context, attrs: AttributeSet?) : View(context, attrs
         strokeWidth = 2F
     }
 
-    private var boxes: Collection<OcrDetectionBox>? = null
+    private var boxes: Collection<DetectionBox>? = null
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
@@ -46,7 +46,7 @@ class DebugOverlay(context: Context, attrs: AttributeSet?) : View(context, attrs
         else -> R.color.cardScanWrongOutline
     })
 
-    fun setBoxes(boxes: Collection<OcrDetectionBox>?) {
+    fun setBoxes(boxes: Collection<DetectionBox>?) {
         this.boxes = boxes
         invalidate()
         requestLayout()

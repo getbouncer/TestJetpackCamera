@@ -8,18 +8,17 @@ import java.io.IOException
 import java.io.InputStream
 import java.net.URL
 import java.nio.ByteBuffer
-import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
 
 
 @Throws(IOException::class)
-private fun readFileToMappedByteBuffer(
+private fun readFileToByteBuffer(
     fileInputStream: FileInputStream,
     startOffset: Long,
     declaredLength: Long
-): MappedByteBuffer = fileInputStream.channel.map(
+): ByteBuffer = fileInputStream.channel.map(
     FileChannel.MapMode.READ_ONLY,
     startOffset,
     declaredLength
@@ -34,7 +33,7 @@ class ResourceLoader(private val context: Context) {
     fun loadModelFromResource(resource: Int): ByteBuffer =
         context.resources.openRawResourceFd(resource).use {
             fileDescriptor -> FileInputStream(fileDescriptor.fileDescriptor).use {
-                input -> readFileToMappedByteBuffer(
+                input -> readFileToByteBuffer(
                     input,
                     fileDescriptor.startOffset,
                     fileDescriptor.declaredLength
@@ -49,30 +48,41 @@ class ResourceLoader(private val context: Context) {
 class WebLoader(private val context: Context) {
 
     companion object {
-        private const val SHA256_ALGORITHM = "SHA-256"
+        private const val HASH_ALGORITHM = "SHA-256"
     }
 
-    @Throws(IOException::class)
+    @Throws(IOException::class, HashMismatchException::class, NoSuchAlgorithmException::class)
     @Synchronized
-    fun loadModelFromWeb(url: URL, localFileName: String, sha256: String): ByteBuffer =
-        if (hashMatches(localFileName, sha256)) {
-            readFileToMappedByteBuffer(localFileName)
+    fun loadModelFromWeb(url: URL, localFileName: String, hash: String): ByteBuffer =
+        if (hashMatches(localFileName, hash)) {
+            readFileToByteBuffer(localFileName)
         } else {
             downloadFile(url, localFileName)
-            readFileToMappedByteBuffer(localFileName)
+            if (hashMatches(localFileName, hash)) {
+                readFileToByteBuffer(localFileName)
+            } else {
+                throw HashMismatchException(HASH_ALGORITHM, hash, calculateHash(localFileName))
+            }
         }
 
     @Throws(IOException::class, NoSuchAlgorithmException::class)
-    private fun hashMatches(localFileName: String, sha256: String): Boolean {
+    private fun hashMatches(localFileName: String, hash: String): Boolean = hash == calculateHash(localFileName)
+
+    @Throws(IOException::class, NoSuchAlgorithmException::class)
+    private fun calculateHash(localFileName: String): String? {
         val file = File(context.cacheDir, localFileName)
-        val digest = MessageDigest.getInstance(SHA256_ALGORITHM)
-        FileInputStream(file).use { digest.update(it.readBytes()) }
-        return sha256 == digest.digest().joinToString("") { "%02x".format(it) }
+        return if (file.exists()) {
+            val digest = MessageDigest.getInstance(HASH_ALGORITHM)
+            FileInputStream(file).use { digest.update(it.readBytes()) }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        } else {
+            null
+        }
     }
 
-    private fun readFileToMappedByteBuffer(localFileName: String): MappedByteBuffer {
+    private fun readFileToByteBuffer(localFileName: String): ByteBuffer {
         val file = File(context.cacheDir, localFileName)
-        return FileInputStream(file).use { readFileToMappedByteBuffer(it, 0, file.length()) }
+        return FileInputStream(file).use { readFileToByteBuffer(it, 0, file.length()) }
     }
 
     @Throws(IOException::class)
