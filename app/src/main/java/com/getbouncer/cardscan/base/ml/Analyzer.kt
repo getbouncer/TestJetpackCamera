@@ -32,12 +32,12 @@ abstract class MLTensorFlowLiteAnalyzer<Input, MLInput, Output, MLOutput>(
 
     private val loggingTransformTimer by lazy { Timer.newInstance(logTag, "transform ${this::class.java.simpleName}") }
     private val loggingMLOutputTimer by lazy { Timer.newInstance(logTag, "ml_output ${this::class.java.simpleName}") }
-    private val loggingAnalysisTimer by lazy { Timer.newInstance(logTag, "analyze ${this::class.java.simpleName}") }
+    private val loggingInferenceTimer by lazy { Timer.newInstance(logTag, "infer ${this::class.java.simpleName}") }
     private val loggingInterpretTimer by lazy { Timer.newInstance(logTag, "interpret ${this::class.java.simpleName}") }
 
     abstract fun transformData(data: Input): MLInput
 
-    abstract fun executeInterpreter(tfInterpreter: Interpreter, data: MLInput, mlOutput: MLOutput)
+    abstract fun executeInference(tfInterpreter: Interpreter, data: MLInput, mlOutput: MLOutput)
 
     override fun analyze(data: Input): Output {
         val mlInput = loggingTransformTimer.measure {
@@ -48,8 +48,8 @@ abstract class MLTensorFlowLiteAnalyzer<Input, MLInput, Output, MLOutput>(
             buildEmptyMLOutput()
         }
 
-        loggingAnalysisTimer.measure {
-            executeInterpreter(tfInterpreter, mlInput, mlOutput)
+        loggingInferenceTimer.measure {
+            executeInference(tfInterpreter, mlInput, mlOutput)
         }
 
         return loggingInterpretTimer.measure {

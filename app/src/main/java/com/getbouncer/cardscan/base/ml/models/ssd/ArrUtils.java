@@ -9,7 +9,9 @@ import java.util.Iterator;
  */
 public class ArrUtils {
 
-    public float[][] reshape(float[][] nums, int r, int c) {
+    private ArrUtils() { /* empty constructor for utility class */ }
+
+    public static float[][] reshape(float[][] nums, int r, int c) {
         int totalElements = nums.length * nums[0].length;
         if (totalElements != r * c || totalElements % r != 0) {
             return nums;
@@ -33,11 +35,11 @@ public class ArrUtils {
         return result;
     }
 
-    public float[][] rearrangeOCRArray(
-            float[][] locations,
-            Hashtable<String, Integer> featureMapSizes,
-            int noOfPriors,
-            int locationsPerPrior
+    public static float[][] rearrangeOCRArray(
+        float[][] locations,
+        Hashtable<String, Integer> featureMapSizes,
+        int noOfPriors,
+        int locationsPerPrior
     ) {
         int totalLocationsForAllLayers = featureMapSizes.get("layerOneWidth")
                 * featureMapSizes.get("layerOneHeight")
@@ -85,13 +87,62 @@ public class ArrUtils {
     }
 
     /**
+     * The model outputs a particular location or a particular class of each prior before moving
+     * on to the next prior. For instance, the model will output probabilities for background
+     * class corresponding to all priors before outputting the probability of next class for the
+     * first prior. This method serves to rearrange the output if you are using outputs from
+     * multiple layers If you use outputs from single layer use the method defined above
+     */
+    public static float[][] rearrangeArray(
+        float[][] locations,
+        int[] featureMapSizes,
+        int noOfPriors,
+        int locationsPerPrior
+    ) {
+        int totalLocationsForAllLayers = 0;
+
+        for (int size : featureMapSizes){
+            totalLocationsForAllLayers = totalLocationsForAllLayers + size * size * noOfPriors * locationsPerPrior;
+        }
+
+        float[][] rearranged = new float[1][totalLocationsForAllLayers];
+        int offset = 0;
+        for (int steps : featureMapSizes){
+            int totalNumberOfLocationsForThisLayer = steps * steps * noOfPriors * locationsPerPrior;
+            int stepsForLoop = steps - 1;
+            int j = 0;
+            int i = 0;
+            int step = 0;
+
+            while (i < totalNumberOfLocationsForThisLayer){
+                while (step < steps){
+                    j = step;
+                    while (j < totalNumberOfLocationsForThisLayer - stepsForLoop + step){
+                        rearranged[0][offset + i] = locations[0][offset + j];
+                        i++;
+                        j = j + steps;
+                    }
+                    step++;
+                }
+                offset = offset + totalNumberOfLocationsForThisLayer;
+            }
+        }
+        return rearranged;
+    }
+
+    /**
      * Convert regressional location results of SSD into boxes in the form of:
      *
      * ```
      * (center_x, center_y, h, w)
      * ```
      */
-    public float[][] convertLocationsToBoxes(float[][] locations, float[][] priors, float centerVariance, float sizeVariance) {
+    public static float[][] convertLocationsToBoxes(
+        float[][] locations,
+        float[][] priors,
+        float centerVariance,
+        float sizeVariance
+    ) {
         float[][] boxes = new float[locations.length][locations[0].length];
 
         for (int i = 0; i< locations.length; i++){
@@ -109,7 +160,7 @@ public class ArrUtils {
     /**
      * Convert center from (center_x, center_y, h, w) to corner form (XMin, YMin, XMax, YMax)
      */
-    public float[][] centerFormToCornerForm(float[][] locations) {
+    public static float[][] centerFormToCornerForm(float[][] locations) {
         float[][] boxes = new float[locations.length][locations[0].length];
 
         for(int i = 0; i < locations.length; i++){
@@ -133,7 +184,7 @@ public class ArrUtils {
      * Compute softmax for each row. This will replace each row value with a value normalized by the
      * sum of all the values in the same row.
      */
-    public float[][] softmax2D(float[][] scores) {
+    public static float[][] softmax2D(float[][] scores) {
         float[][] normalizedScores = new float[scores.length][scores[0].length];
         float rowSum;
 

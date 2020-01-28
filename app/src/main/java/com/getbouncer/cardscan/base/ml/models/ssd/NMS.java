@@ -1,8 +1,5 @@
 package com.getbouncer.cardscan.base.ml.models.ssd;
 
-import com.getbouncer.cardscan.base.ml.models.ssd.ArrUtils;
-import com.getbouncer.cardscan.base.ml.models.ssd.ArrayIndexComparator;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;

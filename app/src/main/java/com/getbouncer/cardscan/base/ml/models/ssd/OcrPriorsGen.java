@@ -1,9 +1,32 @@
 
 package com.getbouncer.cardscan.base.ml.models.ssd;
 
-import com.getbouncer.cardscan.base.ml.models.ssd.ArrUtils;
+public class OcrPriorsGen {
 
-public class OcrPriorsGen{
+    public static float[][] combinePriors(){
+
+        float[][] priorsOne, priorsTwo, priorsCombined;
+
+        priorsOne = genPriors(24, 38, 16, 16, 14, 30, 3, 3);
+        priorsTwo = genPriors(12, 19, 31, 31, 30, 45, 3, 3);
+
+        priorsCombined = new float[priorsOne.length + priorsTwo.length][4];
+
+        for(int i = 0; i < priorsOne.length; i++){
+            for (int j = 0; j< priorsOne[0].length; j++){
+                priorsCombined[i][j] = ArrUtils.clamp(priorsOne[i][j], 0.0f, 1.0f);
+            }
+        }
+
+
+        for(int i = 0; i < priorsTwo.length; i++){
+            for (int j = 0; j< priorsTwo[0].length; j++){
+                priorsCombined[i+priorsOne.length][j] = ArrUtils.clamp(priorsTwo[i][j], 0.0f, 1.0f);
+            }
+        }
+
+        return priorsCombined;
+    }
 
     private static float[][] genPriors(int featureMapSize_height, int featureMapSize_width, int shrinkage_height,
                                       int shrinkage_width, int boxSizeMin, int boxSizeMax, int aspecRatioOne,
@@ -62,30 +85,5 @@ public class OcrPriorsGen{
             }
         }
         return boxes;
-    }
-
-    public static float[][] combinePriors(){
-
-        float[][] priorsOne, priorsTwo, priorsCombined;
-
-        priorsOne = genPriors(24, 38, 16, 16, 14, 30, 3, 3);
-        priorsTwo = genPriors(12, 19, 31, 31, 30, 45, 3, 3);
-
-        priorsCombined = new float[priorsOne.length + priorsTwo.length][4];
-
-        for(int i = 0; i < priorsOne.length; i++){
-            for (int j = 0; j< priorsOne[0].length; j++){
-                priorsCombined[i][j] = ArrUtils.clamp(priorsOne[i][j], 0.0f, 1.0f);
-            }
-        }
-
-
-        for(int i = 0; i < priorsTwo.length; i++){
-            for (int j = 0; j< priorsTwo[0].length; j++){
-                priorsCombined[i+priorsOne.length][j] = ArrUtils.clamp(priorsTwo[i][j], 0.0f, 1.0f);
-            }
-        }
-
-        return priorsCombined;
     }
 }

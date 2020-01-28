@@ -3,6 +3,8 @@
     package="com.getbouncer.cardscan.base">
 
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FLASHLIGHT"/>
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:screenOrientation="portrait"
