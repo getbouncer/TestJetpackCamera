@@ -8,7 +8,7 @@ import android.util.AttributeSet
 import android.util.Size
 import android.view.View
 import com.getbouncer.cardscan.base.R
-import com.getbouncer.cardscan.base.ml.models.ssd.DetectionBox
+import com.getbouncer.cardscan.base.ml.ssd.DetectionBox
 
 fun RectF.scaled(scaledSize: Size): RectF {
     return RectF(

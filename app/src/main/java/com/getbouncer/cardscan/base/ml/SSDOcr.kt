@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.ml.models
+package com.getbouncer.cardscan.base.ml
 
 import android.content.Context
 import android.util.Log
@@ -10,13 +10,13 @@ import com.getbouncer.cardscan.base.domain.ScanImage
 import com.getbouncer.cardscan.base.image.hasOpenGl31
 import com.getbouncer.cardscan.base.image.scale
 import com.getbouncer.cardscan.base.image.toRGBByteBuffer
-import com.getbouncer.cardscan.base.ml.ResourceLoader
-import com.getbouncer.cardscan.base.ml.MLTensorFlowLiteAnalyzer
-import com.getbouncer.cardscan.base.ml.TFLResourceAnalyzerFactory
-import com.getbouncer.cardscan.base.ml.models.ssd.ArrUtils
-import com.getbouncer.cardscan.base.ml.models.ssd.DetectionBox
-import com.getbouncer.cardscan.base.ml.models.ssd.OcrPriorsGen
-import com.getbouncer.cardscan.base.ml.models.ssd.PredictionAPI
+import com.getbouncer.cardscan.base.ResourceLoader
+import com.getbouncer.cardscan.base.MLTensorFlowLiteAnalyzer
+import com.getbouncer.cardscan.base.TFLResourceAnalyzerFactory
+import com.getbouncer.cardscan.base.ml.ssd.ArrUtils
+import com.getbouncer.cardscan.base.ml.ssd.DetectionBox
+import com.getbouncer.cardscan.base.ml.ssd.OcrPriorsGen
+import com.getbouncer.cardscan.base.ml.ssd.PredictionAPI
 import com.getbouncer.cardscan.base.util.CreditCardUtils.isValidCardNumber
 import org.tensorflow.lite.Interpreter
 import java.nio.ByteBuffer
@@ -209,7 +209,9 @@ class SSDOcr private constructor(interpreter: Interpreter)
     /**
      * A factory for creating instances of the [SSDOcr].
      */
-    class Factory(context: Context) : TFLResourceAnalyzerFactory<SSDOcr>(ResourceLoader(context)) {
+    class Factory(context: Context) : TFLResourceAnalyzerFactory<SSDOcr>(
+        ResourceLoader(context)
+    ) {
         companion object {
             private const val USE_GPU = false
             private const val NUM_THREADS = 1
@@ -224,6 +226,7 @@ class SSDOcr private constructor(interpreter: Interpreter)
             .setUseNNAPI(USE_GPU && hasOpenGl31(context))
             .setNumThreads(NUM_THREADS)
 
-        override fun newInstance(): SSDOcr = SSDOcr(createInterpreter())
+        override fun newInstance(): SSDOcr =
+            SSDOcr(createInterpreter())
     }
 }

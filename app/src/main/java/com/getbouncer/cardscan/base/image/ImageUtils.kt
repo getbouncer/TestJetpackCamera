@@ -70,6 +70,26 @@ fun Bitmap.toRGBByteBuffer(mean: Float = 0F, std: Float = 255F): ByteBuffer {
     return rgbFloat
 }
 
+data class ImageTransformValues(val red: Float, val green: Float, val blue: Float)
+
+fun Bitmap.toRGBByteBuffer(mean: ImageTransformValues, std: ImageTransformValues): ByteBuffer {
+    val argb = IntArray(width * height).also {
+        getPixels(it, 0, width, 0, 0, width, height)
+    }
+
+    val rgbFloat = ByteBuffer.allocateDirect(this.width * this.height * DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL)
+    rgbFloat.order(ByteOrder.nativeOrder())
+    argb.forEach {
+        // ignore the alpha value ((it shr 24 and 0xFF) - mean) / std)
+        rgbFloat.putFloat(((it shr 16 and 0xFF) - mean.red) / std.red)
+        rgbFloat.putFloat(((it shr 8 and 0xFF) - mean.green) / std.green)
+        rgbFloat.putFloat(((it and 0xFF) - mean.blue) / std.blue)
+    }
+
+    rgbFloat.rewind()
+    return rgbFloat
+}
+
 fun hasOpenGl31(context: Context): Boolean {
     val openGlVersion = 0x00030001
     val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager

@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.ml
+package com.getbouncer.cardscan.base
 
 import org.tensorflow.lite.Interpreter
 import java.net.URL
@@ -16,7 +16,8 @@ interface AnalyzerFactory<Output : Analyzer<*, *>> {
 /**
  * A factory that creates tensorflow models as analyzers.
  */
-sealed class TFLAnalyzerFactory<Output : Analyzer<*, *>> : AnalyzerFactory<Output> {
+sealed class TFLAnalyzerFactory<Output : Analyzer<*, *>> :
+    AnalyzerFactory<Output> {
     abstract val tfOptions: Interpreter.Options
 
     abstract fun loadModel(): ByteBuffer
@@ -44,9 +45,9 @@ abstract class TFLWebAnalyzerFactory<Output : Analyzer<*, *>>(private val loader
 
     abstract val url: URL
 
-    abstract val sha256: String
+    abstract val hash: String
 
     private val localFileName: String by lazy { url.path.replace('/', '_') }
 
-    override fun loadModel() = loader.loadModelFromWeb(url, localFileName, sha256)
+    override fun loadModel() = loader.loadModelFromWeb(url, localFileName, hash)
 }

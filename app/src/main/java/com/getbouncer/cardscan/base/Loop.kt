@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.ml
+package com.getbouncer.cardscan.base
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel

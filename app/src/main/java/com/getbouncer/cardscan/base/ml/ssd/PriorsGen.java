@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.ml.models.ssd;
+package com.getbouncer.cardscan.base.ml.ssd;
 
 public class PriorsGen {
 

@@ -22,21 +22,21 @@ import com.getbouncer.cardscan.base.config.MEASURE_TIME
 import com.getbouncer.cardscan.base.config.TEST_CARD_NUMBER
 import com.getbouncer.cardscan.base.domain.CardOcrResult
 import com.getbouncer.cardscan.base.domain.ScanImage
-import com.getbouncer.cardscan.base.ml.AggregateResultListener
-import com.getbouncer.cardscan.base.ml.CardImageOcrResultAggregator
-import com.getbouncer.cardscan.base.ml.FiniteAnalyzerLoop
-import com.getbouncer.cardscan.base.ml.MemoryBoundAnalyzerLoop
-import com.getbouncer.cardscan.base.ml.Rate
-import com.getbouncer.cardscan.base.ml.ResultAggregatorConfig
-import com.getbouncer.cardscan.base.ml.ResultHandler
-import com.getbouncer.cardscan.base.ml.models.SSDObjectDetect
-import com.getbouncer.cardscan.base.ml.models.SSDOcr
-import com.getbouncer.cardscan.base.ml.models.ssd.DetectionBox
+import com.getbouncer.cardscan.base.AggregateResultListener
+import com.getbouncer.cardscan.base.CardImageOcrResultAggregator
+import com.getbouncer.cardscan.base.FiniteAnalyzerLoop
+import com.getbouncer.cardscan.base.MemoryBoundAnalyzerLoop
+import com.getbouncer.cardscan.base.Rate
+import com.getbouncer.cardscan.base.ResultAggregatorConfig
+import com.getbouncer.cardscan.base.ResultHandler
+import com.getbouncer.cardscan.base.ml.ObjectAndScreenDetect
+import com.getbouncer.cardscan.base.ml.SSDObjectDetect
+import com.getbouncer.cardscan.base.ml.SSDOcr
+import com.getbouncer.cardscan.base.ml.ScreenDetect
 import com.getbouncer.cardscan.base.util.CreditCardUtils
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.ClockMark
@@ -48,7 +48,8 @@ import kotlin.time.seconds
 private const val CAMERA_PERMISSION_REQUEST_CODE = 1200
 
 @ExperimentalTime
-class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage, CardOcrResult>, CoroutineScope {
+class CardScanActivity : AppCompatActivity(),
+    AggregateResultListener<ScanImage, CardOcrResult>, CoroutineScope {
 
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Default
@@ -56,7 +57,11 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     private var lastWrongCard: ClockMark? = null
     private val showWrongDuration = 1.seconds
 
-    private val objectDetectFactory = SSDObjectDetect.Factory(this)
+    private val objectAndScreenDetectFactory = ObjectAndScreenDetect.Factory(
+        this,
+        SSDObjectDetect.Factory(this),
+        ScreenDetect.Factory(this)
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,9 +76,7 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
         }
 
         // Start the object detector downloading
-        launch {
-            objectDetectFactory.warmUp()
-        }
+        objectAndScreenDetectFactory.warmUp()
     }
 
     override fun onRequestPermissionsResult(
@@ -135,9 +138,10 @@ class CardScanActivity : AppCompatActivity(), AggregateResultListener<ScanImage,
     private fun launchCompletionLoop(frames: Collection<ScanImage>) {
         val completionLoop = FiniteAnalyzerLoop(
             frames = frames,
-            analyzerFactory = objectDetectFactory,
-            resultHandler = object : ResultHandler<ScanImage, List<DetectionBox>> {
-                override fun onResult(result: List<DetectionBox>, data: ScanImage) {
+            analyzerFactory = objectAndScreenDetectFactory,
+            resultHandler = object :
+                ResultHandler<ScanImage, ObjectAndScreenDetect.Prediction> {
+                override fun onResult(result: ObjectAndScreenDetect.Prediction, data: ScanImage) {
                     Log.d("BOUNCER", "COMPLETION LOOP PROCESSED FRAME $result")
                 }
             },

@@ -4,8 +4,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
 import androidx.test.platform.app.InstrumentationRegistry
 import com.getbouncer.cardscan.base.R
-import com.getbouncer.cardscan.base.ml.ResourceLoader
-import com.getbouncer.cardscan.base.ml.WebLoader
+import com.getbouncer.cardscan.base.ResourceLoader
+import com.getbouncer.cardscan.base.WebLoader
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
