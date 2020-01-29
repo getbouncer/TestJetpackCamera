@@ -37,6 +37,7 @@ import com.getbouncer.cardscan.base.util.CreditCardUtils
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.ClockMark
@@ -142,6 +143,12 @@ class CardScanActivity : AppCompatActivity(),
             resultHandler = object :
                 ResultHandler<ScanImage, ObjectAndScreenDetect.Prediction> {
                 override fun onResult(result: ObjectAndScreenDetect.Prediction, data: ScanImage) {
+                    if (IS_DEBUG) {
+                        runOnUiThread {
+                            debugObj.visibility = View.VISIBLE
+                            debugObj.setImageBitmap(data.objImage)
+                        }
+                    }
                     Log.d("BOUNCER", "COMPLETION LOOP PROCESSED FRAME $result")
                 }
             },
