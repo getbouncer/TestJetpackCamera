@@ -68,10 +68,10 @@
     <attr name="cardScanCornerWidth" format="dimension" />
 
     <declare-styleable name="ViewFinderOverlay">
-        <attr name="viewFinderPadding" format="dimension" />
         <attr name="viewFinderVerticalWeight" format="float" />
         <attr name="viewFinderHorizontalWeight" format="float" />
         <attr name="viewFinderCardAspectRatio" format="fraction" />
+        <attr name="viewFinderBufferPercent" format="float" />
 
         <attr name="showBackground" format="boolean" />
         <attr name="showCorners" format="boolean" />

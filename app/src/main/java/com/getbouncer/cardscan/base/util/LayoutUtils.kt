@@ -14,30 +14,35 @@ import kotlin.math.roundToInt
 val STANDARD_CARD_RATIO = Rational(8560, 5398)
 
 /**
+ * The percentage of the preview frame that is used as a buffer surrounding the card.
+ */
+const val CARD_PREVIEW_FRAME_BUFFER = 0.1F
+
+/**
  * Calculate a rectangle where the card preview indicator should exist on the preview image.
  *
  * @param previewImage: The size of the preview image on which to place the card
- * @param minimumPaddingPx: The minimum padding in pixels between the edge of the preview image and the edge of the card
- *                          crop.
  * @param verticalWeight: A float from 0 to 1 indicating where vertically the preview should be positioned. 0 is at the
  *                        top, 1 is at the bottom, 0.5 is in the middle.
  * @param horizontalWeight: A float from 0 to 1 indicating where horizontally the preview should be positioned. 0 is at
  *                          the left, 1 is at the right, 0.5 is in the middle.
  * @param cardRatio: The X/Y ratio of the card preview image. This should match the ratio of the ML models that operate
  *                   on the card.
+ * @param bufferPercent: How much of the preview image to leave on either side of the preview window surrounding the
+ *                   OCR crop.
  */
 fun calculateCardFinderRect(
     previewImage: Size,
-    minimumPaddingPx: Int = 0,
     verticalWeight: Float = 0.5F,
     horizontalWeight: Float = 0.5F,
-    cardRatio: Float = STANDARD_CARD_RATIO.toFloat()
+    cardRatio: Float = STANDARD_CARD_RATIO.toFloat(),
+    bufferPercent: Float = CARD_PREVIEW_FRAME_BUFFER
 ): Rect {
 
     // calculate the actual available size of the image given the padding requirements.
     val paddedSize = Size(
-        previewImage.width - 2 * minimumPaddingPx,
-        previewImage.height - 2 * minimumPaddingPx
+        (previewImage.width * (1 - 2 * bufferPercent)).roundToInt(),
+        (previewImage.height * (1 - 2 * bufferPercent)).roundToInt()
     )
 
     // calculate the maximum size of the card. Ensure that a square will fit as well for object
@@ -53,17 +58,20 @@ fun calculateCardFinderRect(
                 + (squareSize.height - cardSize.height) / 2
     )
 
+    val paddingX = (previewImage.width - paddedSize.width) / 2
+    val paddingY = (previewImage.height - paddedSize.height) / 2
+
     // calculate the bounds of the card preview
-    val cardLeft = minimumPaddingPx + topLeftPoint.x
-    val cardTop = minimumPaddingPx + topLeftPoint.y
+    val cardLeft = paddingX + topLeftPoint.x
+    val cardTop = paddingY + topLeftPoint.y
     val cardRight = cardLeft + cardSize.width
     val cardBottom = cardTop + cardSize.height
 
     return Rect(
-        /* left */ max(cardLeft, minimumPaddingPx),
-        /* top */ max(cardTop, minimumPaddingPx),
-        /* right */ min(cardRight, previewImage.width - minimumPaddingPx),
-        /* bottom */ min(cardBottom, previewImage.height - minimumPaddingPx)
+        /* left */ max(cardLeft, paddingX),
+        /* top */ max(cardTop, paddingY),
+        /* right */ min(cardRight, previewImage.width - paddingX),
+        /* bottom */ min(cardBottom, previewImage.height - paddingY)
     )
 }
 
@@ -147,40 +155,25 @@ fun calculateCardCrop(fullImage: Size, previewImage: Size, cardFinder: Rect): Re
 
     // Position the scaledCardFinder on the fullImage
     return Rect(
-        scaledCardFinder.left + scaledPreviewImage.left,
-        scaledCardFinder.top + scaledPreviewImage.top,
-        scaledCardFinder.right + scaledPreviewImage.left,
-        scaledCardFinder.bottom + scaledPreviewImage.top
+        max(0, scaledCardFinder.left + scaledPreviewImage.left),
+        max(0, scaledCardFinder.top + scaledPreviewImage.top),
+        min(fullImage.width, scaledCardFinder.right + scaledPreviewImage.left),
+        min(fullImage.height, scaledCardFinder.bottom + scaledPreviewImage.top)
     )
 }
 
 /**
  * Given a card finder region of a preview image, calculate the associated object detection square.
  */
-private fun calculateObjectDetectionFromCardFinder(previewImage: Size, cardFinder: Rect): Rect =
-    if (cardFinder.width() > cardFinder.height()) {
-        val objectDetectionSquareTop =
-            max(0, cardFinder.top + cardFinder.height() / 2 - cardFinder.width() / 2)
-        val objectDetectionSquareBottom =
-            min(previewImage.height, objectDetectionSquareTop + cardFinder.width())
-        Rect(
-            /* left */ cardFinder.left,
-            /* top */ objectDetectionSquareTop,
-            /* right */ cardFinder.right,
-            /* bottom */ objectDetectionSquareBottom
-        )
-    } else {
-        val objectDetectionSquareLeft =
-            max(0, cardFinder.left + cardFinder.width() / 2 - cardFinder.height() / 2)
-        val objectDetectionSquareRight =
-            min(previewImage.width, objectDetectionSquareLeft + cardFinder.height())
-        Rect(
-            /* left */ objectDetectionSquareLeft,
-            /* top */ cardFinder.top,
-            /* right */ objectDetectionSquareRight,
-            /* bottom */ cardFinder.bottom
-        )
-    }
+private fun calculateObjectDetectionFromCardFinder(previewImage: Size, cardFinder: Rect): Rect {
+    val objectDetectionSquareSize = maxAspectRatioInSize(previewImage, Rational(1, 1))
+    return Rect(
+        /* left */ max(0, cardFinder.centerX() - objectDetectionSquareSize.width / 2),
+        /* top */ max(0, cardFinder.centerY() - objectDetectionSquareSize.height / 2),
+        /* right */ min(previewImage.width, cardFinder.centerX() + objectDetectionSquareSize.width / 2),
+        /* bottom */ min(previewImage.height, cardFinder.centerY() + objectDetectionSquareSize.height / 2)
+    )
+}
 
 /**
  * Calculate what portion of the full image should be cropped for object detection based on the position of card finder
@@ -209,9 +202,9 @@ fun calculateObjectDetectionCrop(fullImage: Size, previewImage: Size, cardFinder
 
     // Position the scaledObjectDetectionSquare on the fullImage
     return Rect(
-        scaledObjectDetectionSquare.left + scaledPreviewImage.left,
-        scaledObjectDetectionSquare.top + scaledPreviewImage.top,
-        scaledObjectDetectionSquare.right + scaledPreviewImage.left,
-        scaledObjectDetectionSquare.bottom + scaledPreviewImage.top
+        max(0, scaledObjectDetectionSquare.left + scaledPreviewImage.left),
+        max(0, scaledObjectDetectionSquare.top + scaledPreviewImage.top),
+        min(fullImage.width, scaledObjectDetectionSquare.right + scaledPreviewImage.left),
+        min(fullImage.height, scaledObjectDetectionSquare.bottom + scaledPreviewImage.top)
     )
 }

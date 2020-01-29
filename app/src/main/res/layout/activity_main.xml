@@ -27,8 +27,7 @@
             android:layout_width="match_parent"
             android:contentDescription="@string/card_preview_description"
             app:showCorners="true"
-            app:showOutline="true"
-            app:viewFinderPadding="@dimen/cardScanViewFinderPadding" />
+            app:showOutline="true" />
 
     </FrameLayout>
 

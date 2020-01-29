@@ -45,16 +45,16 @@ class ScreenDetect private constructor(interpreter: Interpreter)
         listOf(mlOutput[0][0], mlOutput[0][1])
 
     override fun transformData(data: ScanImage): ByteBuffer =
-        if (data.objImage.width != trainedImageSize.width || data.objImage.height != trainedImageSize.height) {
-            val aspectRatio = data.objImage.width.toDouble() / data.objImage.height
+        if (data.fullImage.width != trainedImageSize.width || data.fullImage.height != trainedImageSize.height) {
+            val aspectRatio = data.fullImage.width.toDouble() / data.fullImage.height
             val targetAspectRatio = trainedImageSize.width.toDouble() / trainedImageSize.height
             if (abs(1 - aspectRatio / targetAspectRatio) * 100 > ASPECT_RATIO_TOLERANCE_PCT) {
-                Log.w(logTag, "Provided image ${Size(data.objImage.width, data.objImage.height)} is outside " +
+                Log.w(logTag, "Provided image ${Size(data.fullImage.width, data.fullImage.height)} is outside " +
                         "target aspect ratio $targetAspectRatio tolerance $ASPECT_RATIO_TOLERANCE_PCT%")
             }
-            data.objImage.scale(trainedImageSize).toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD)
+            data.fullImage.scale(trainedImageSize).toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD)
         } else {
-            data.objImage.toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD)
+            data.fullImage.toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD)
         }
 
     override fun executeInference(

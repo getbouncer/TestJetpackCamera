@@ -12,6 +12,7 @@ import android.util.TypedValue
 import android.view.View
 import androidx.core.graphics.toRectF
 import com.getbouncer.cardscan.base.R
+import com.getbouncer.cardscan.base.util.CARD_PREVIEW_FRAME_BUFFER
 import com.getbouncer.cardscan.base.util.STANDARD_CARD_RATIO
 import com.getbouncer.cardscan.base.util.calculateCardFinderRect
 
@@ -38,10 +39,10 @@ class ViewFinderOverlay(context: Context, attrs: AttributeSet?) : View(context, 
 
     private val theme = context.theme
     private val attributes = theme.obtainStyledAttributes(attrs, R.styleable.ViewFinderOverlay, 0, 0)
-    private val paddingPx = attributes.run { getDimensionPixelSize(R.styleable.ViewFinderOverlay_viewFinderPadding, 0) }
     private val verticalWeight = attributes.run { getFloat(R.styleable.ViewFinderOverlay_viewFinderVerticalWeight, 0.5F) }
     private val horizontalWeight = attributes.run { getFloat(R.styleable.ViewFinderOverlay_viewFinderHorizontalWeight, 0.5F) }
     private val cardRatio = attributes.run { getFraction(R.styleable.ViewFinderOverlay_viewFinderCardAspectRatio, 1, 1, STANDARD_CARD_RATIO.toFloat()) }
+    private val bufferPercent = attributes.run { getFloat(R.styleable.ViewFinderOverlay_viewFinderBufferPercent, CARD_PREVIEW_FRAME_BUFFER) }
 
     private var showBackground = attributes.run { getBoolean(R.styleable.ViewFinderOverlay_showBackground, true) }
     private var showCorners = attributes.run { getBoolean(R.styleable.ViewFinderOverlay_showCorners, false) }
@@ -201,10 +202,10 @@ class ViewFinderOverlay(context: Context, attrs: AttributeSet?) : View(context, 
      */
     fun getCardFinderRectangle() = calculateCardFinderRect(
         previewImage = Size(this.width, this.height),
-        minimumPaddingPx = paddingPx,
         verticalWeight = verticalWeight,
         horizontalWeight = horizontalWeight,
-        cardRatio = cardRatio
+        cardRatio = cardRatio,
+        bufferPercent = bufferPercent
     )
 
     fun getState() = state
