@@ -95,7 +95,7 @@ class CardScanActivity : AppCompatActivity(),
         val mainLoopAdapter = launchMainLoop()
 
         val imageAnalysisConfig = ImageAnalysisConfig.Builder()
-            .setTargetResolution(Size(1280, 720))
+            .setTargetResolution(Size(1200, 900))
             .setLensFacing(CameraX.LensFacing.BACK)
             .build()
         val imageAnalysis = ImageAnalysis(imageAnalysisConfig)
