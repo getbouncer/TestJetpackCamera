@@ -38,7 +38,7 @@ fun SizeAndCenter.setHeight(height: Float) { this[3] = height }
 /**
  * Convert [SizeAndCenter] (centerX, centerY, w, h) to [RectForm] (left, top, right, bottom)
  */
-fun SizeAndCenter.toRectForm(): RectForm {
+fun SizeAndCenter.toRectForm() {
     val left = centerX() - width() / 2
     val top = centerY() - height() / 2
     val right = centerX() + width() / 2
@@ -48,35 +48,16 @@ fun SizeAndCenter.toRectForm(): RectForm {
     setTop(top)
     setRight(right)
     setBottom(bottom)
-    return this
 }
 
 /**
  * Clamp all values in the array to the specified [minimum] and [maximum].
  */
 fun SizeAndCenter.clampAll(minimum: Float, maximum: Float) {
-    setCenterX(
-        clamp(
-            centerX(),
-            minimum,
-            maximum
-        )
-    )
-    setCenterY(
-        clamp(
-            centerY(),
-            minimum,
-            maximum
-        )
-    )
+    setCenterX(clamp(centerX(), minimum, maximum))
+    setCenterY(clamp(centerY(), minimum, maximum))
     setWidth(clamp(width(), minimum, maximum))
-    setHeight(
-        clamp(
-            height(),
-            minimum,
-            maximum
-        )
-    )
+    setHeight(clamp(height(), minimum, maximum))
 }
 
 /**

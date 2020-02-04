@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.ml.rewritten.ssd
+package com.getbouncer.cardscan.base.ml.ssd
 
 import androidx.test.filters.SmallTest
 import com.getbouncer.cardscan.base.util.filterByIndexes

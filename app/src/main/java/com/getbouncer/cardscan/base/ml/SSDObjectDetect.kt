@@ -17,7 +17,6 @@ import com.getbouncer.cardscan.base.ml.ssd.domain.toRectForm
 import com.getbouncer.cardscan.base.ml.ssd.extractPredictions
 import com.getbouncer.cardscan.base.ml.ssd.rearrangeArray
 import com.getbouncer.cardscan.base.util.reshape
-import com.getbouncer.cardscan.base.util.updateEach
 import com.getbouncer.cardscan.base.ml.ssd.ObjectPriorsGen
 import org.tensorflow.lite.Interpreter
 import java.io.FileNotFoundException
@@ -128,7 +127,7 @@ class SSDObjectDetect private constructor(interpreter: Interpreter)
             centerVariance = CENTER_VARIANCE,
             sizeVariance = SIZE_VARIANCE
         )
-        boxes.updateEach { it.toRectForm() }
+        boxes.forEach { it.toRectForm() }
 
         val scores = rearrangeArray(
             locations = outputClasses,

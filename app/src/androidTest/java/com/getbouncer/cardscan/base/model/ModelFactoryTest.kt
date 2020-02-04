@@ -7,6 +7,7 @@ import com.getbouncer.cardscan.base.R
 import com.getbouncer.cardscan.base.ResourceLoader
 import com.getbouncer.cardscan.base.WebLoader
 import com.getbouncer.cardscan.base.ml.SSDObjectDetect
+import com.getbouncer.cardscan.base.ml.SSDOcr
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -25,7 +26,7 @@ class ModelFactoryTest {
     @Test
     @SmallTest
     fun loadModelFromResource_correct() {
-        val byteBuffer = ResourceLoader(appContext).loadModelFromResource(R.raw.ssdelrond0136)
+        val byteBuffer = ResourceLoader(appContext).loadModelFromResource(SSDOcr.Factory(appContext).modelFileResource)
         assertEquals(3265588, byteBuffer.limit(), "File is not expected size")
         byteBuffer.rewind()
 
@@ -59,7 +60,7 @@ class ModelFactoryTest {
             localFileName,
             factory.hash
         )
-        assertEquals(4983688, byteBuffer.limit(), "File is not expected size")
+        assertEquals(5006060, byteBuffer.limit(), "File is not expected size")
         byteBuffer.rewind()
 
         // ensure not all bytes are zero

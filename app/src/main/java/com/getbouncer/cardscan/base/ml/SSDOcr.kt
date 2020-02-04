@@ -18,7 +18,6 @@ import com.getbouncer.cardscan.base.ml.ssd.extractPredictions
 import com.getbouncer.cardscan.base.util.reshape
 import com.getbouncer.cardscan.base.ml.ssd.domain.softMax2D
 import com.getbouncer.cardscan.base.ml.ssd.domain.toRectForm
-import com.getbouncer.cardscan.base.util.updateEach
 import com.getbouncer.cardscan.base.ml.ssd.rearrangeOCRArray
 import com.getbouncer.cardscan.base.util.CreditCardUtils.isValidCardNumber
 import org.tensorflow.lite.Interpreter
@@ -138,7 +137,7 @@ class SSDOcr private constructor(interpreter: Interpreter)
             centerVariance = CENTER_VARIANCE,
             sizeVariance = SIZE_VARIANCE
         )
-        boxes.updateEach { it.toRectForm() }
+        boxes.forEach { it.toRectForm() }
 
         val scores = rearrangeOCRArray(
             locations = outputClasses,
