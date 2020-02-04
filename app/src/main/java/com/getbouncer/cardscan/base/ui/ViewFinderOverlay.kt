@@ -12,9 +12,9 @@ import android.util.TypedValue
 import android.view.View
 import androidx.core.graphics.toRectF
 import com.getbouncer.cardscan.base.R
-import com.getbouncer.cardscan.base.util.CARD_PREVIEW_FRAME_BUFFER
-import com.getbouncer.cardscan.base.util.STANDARD_CARD_RATIO
-import com.getbouncer.cardscan.base.util.calculateCardFinderRect
+import com.getbouncer.cardscan.base.ui.util.CARD_PREVIEW_FRAME_BUFFER
+import com.getbouncer.cardscan.base.ui.util.STANDARD_CARD_RATIO
+import com.getbouncer.cardscan.base.ui.util.calculateCardFinderRect
 
 /**
  * Render a view finder overlay based on the specified theme. This was originally based on the medium post here:
@@ -42,7 +42,9 @@ class ViewFinderOverlay(context: Context, attrs: AttributeSet?) : View(context, 
     private val verticalWeight = attributes.run { getFloat(R.styleable.ViewFinderOverlay_viewFinderVerticalWeight, 0.5F) }
     private val horizontalWeight = attributes.run { getFloat(R.styleable.ViewFinderOverlay_viewFinderHorizontalWeight, 0.5F) }
     private val cardRatio = attributes.run { getFraction(R.styleable.ViewFinderOverlay_viewFinderCardAspectRatio, 1, 1, STANDARD_CARD_RATIO.toFloat()) }
-    private val bufferPercent = attributes.run { getFloat(R.styleable.ViewFinderOverlay_viewFinderBufferPercent, CARD_PREVIEW_FRAME_BUFFER) }
+    private val bufferPercent = attributes.run { getFloat(R.styleable.ViewFinderOverlay_viewFinderBufferPercent,
+        CARD_PREVIEW_FRAME_BUFFER
+    ) }
 
     private var showBackground = attributes.run { getBoolean(R.styleable.ViewFinderOverlay_showBackground, true) }
     private var showCorners = attributes.run { getBoolean(R.styleable.ViewFinderOverlay_showCorners, false) }

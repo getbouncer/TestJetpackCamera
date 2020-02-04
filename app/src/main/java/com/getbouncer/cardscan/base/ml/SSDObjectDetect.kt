@@ -3,17 +3,22 @@ package com.getbouncer.cardscan.base.ml
 import android.content.Context
 import android.util.Log
 import android.util.Size
-import com.getbouncer.cardscan.base.domain.ScanImage
+import com.getbouncer.cardscan.base.image.ScanImage
 import com.getbouncer.cardscan.base.image.hasOpenGl31
 import com.getbouncer.cardscan.base.image.scale
 import com.getbouncer.cardscan.base.image.toRGBByteBuffer
 import com.getbouncer.cardscan.base.MLTensorFlowLiteAnalyzer
 import com.getbouncer.cardscan.base.TFLWebAnalyzerFactory
 import com.getbouncer.cardscan.base.WebLoader
-import com.getbouncer.cardscan.base.ml.ssd.ArrUtils
 import com.getbouncer.cardscan.base.ml.ssd.DetectionBox
-import com.getbouncer.cardscan.base.ml.ssd.PredictionAPI
-import com.getbouncer.cardscan.base.ml.ssd.PriorsGen
+import com.getbouncer.cardscan.base.ml.ssd.domain.adjustLocations
+import com.getbouncer.cardscan.base.ml.ssd.domain.softMax2D
+import com.getbouncer.cardscan.base.ml.ssd.domain.toRectForm
+import com.getbouncer.cardscan.base.ml.ssd.extractPredictions
+import com.getbouncer.cardscan.base.ml.ssd.rearrangeArray
+import com.getbouncer.cardscan.base.util.reshape
+import com.getbouncer.cardscan.base.util.updateEach
+import com.getbouncer.cardscan.base.ml.ssd.ObjectPriorsGen
 import org.tensorflow.lite.Interpreter
 import java.io.FileNotFoundException
 import java.net.URL
@@ -47,12 +52,12 @@ class SSDObjectDetect private constructor(interpreter: Interpreter)
          * For each activation in our feature map, we have predictions for 6 bounding boxes
          * of different aspect ratios
          */
-        private const val NUM_OF_PRIORS_PER_ACTIVATION = 3
+        private const val NUM_OF_PRIORS_PER_ACTIVATION = 6
 
         /**
-         * We can detect a total of 12 objects plus the background class
+         * We can detect a total of 13 objects plus the background class
          */
-        private const val NUM_OF_CLASSES = 13
+        private const val NUM_OF_CLASSES = 14
 
         /**
          * Each prior or bounding box can be represented by 4 coordinates XMin, YMin, XMax, YMax.
@@ -73,18 +78,19 @@ class SSDObjectDetect private constructor(interpreter: Interpreter)
         private const val IOU_THRESHOLD = 0.45f
         private const val CENTER_VARIANCE = 0.1f
         private const val SIZE_VARIANCE = 0.2f
-        private const val TOP_K = 10
+        private const val LIMIT = 10
+
+        private val TRAINED_IMAGE_SIZE = Size(300, 300)
 
         private val FEATURE_MAP_SIZES = intArrayOf(19, 10)
 
         /**
          * This value should never change, and is thread safe.
          */
-        private val PRIORS by lazy { PriorsGen.combinePriors() }
+        private val PRIORS by lazy { ObjectPriorsGen.combinePriors() }
     }
 
     override val logTag: String = "ssd_object_detect"
-    override val trainedImageSize: Size = Size(300, 300)
 
     /**
      * The model reshapes all the data to 1 x [All Data Points]
@@ -95,14 +101,14 @@ class SSDObjectDetect private constructor(interpreter: Interpreter)
     )
 
     override fun transformData(data: ScanImage): Array<ByteBuffer> =
-        if (data.objImage.width != trainedImageSize.width || data.objImage.height != trainedImageSize.height) {
+        if (data.objImage.width != TRAINED_IMAGE_SIZE.width || data.objImage.height != TRAINED_IMAGE_SIZE.height) {
             val aspectRatio = data.objImage.width.toDouble() / data.objImage.height
-            val targetAspectRatio = trainedImageSize.width.toDouble() / trainedImageSize.height
+            val targetAspectRatio = TRAINED_IMAGE_SIZE.width.toDouble() / TRAINED_IMAGE_SIZE.height
             if (abs(1 - aspectRatio / targetAspectRatio) * 100 > ASPECT_RATIO_TOLERANCE_PCT) {
                 Log.w(logTag, "Provided image ${Size(data.objImage.width, data.objImage.height)} is outside " +
                         "target aspect ratio $targetAspectRatio tolerance $ASPECT_RATIO_TOLERANCE_PCT%")
             }
-            arrayOf(data.objImage.scale(trainedImageSize).toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD))
+            arrayOf(data.objImage.scale(TRAINED_IMAGE_SIZE).toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD))
         } else {
             arrayOf(data.objImage.toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD))
         }
@@ -111,58 +117,34 @@ class SSDObjectDetect private constructor(interpreter: Interpreter)
         val outputClasses = mlOutput[0] ?: arrayOf(FloatArray(NUM_CLASS))
         val outputLocations = mlOutput[1] ?: arrayOf(FloatArray(NUM_LOC))
 
-        var kBoxes = ArrUtils.rearrangeArray(
-            outputLocations,
-            FEATURE_MAP_SIZES,
-            NUM_OF_PRIORS_PER_ACTIVATION,
-            NUM_OF_COORDINATES
+        val boxes = rearrangeArray(
+            locations = outputLocations,
+            featureMapSizes = FEATURE_MAP_SIZES,
+            numberOfPriors = NUM_OF_PRIORS_PER_ACTIVATION,
+            locationsPerPrior = NUM_OF_COORDINATES
+        ).reshape(NUM_OF_COORDINATES)
+        boxes.adjustLocations(
+            priors = PRIORS,
+            centerVariance = CENTER_VARIANCE,
+            sizeVariance = SIZE_VARIANCE
         )
-        kBoxes = ArrUtils.reshape(kBoxes,
-            NUM_OF_PRIORS,
-            NUM_OF_COORDINATES
-        )
-        kBoxes = ArrUtils.convertLocationsToBoxes(
-            kBoxes,
-            PRIORS,
-            CENTER_VARIANCE,
-            SIZE_VARIANCE
-        )
-        kBoxes = ArrUtils.centerFormToCornerForm(kBoxes)
+        boxes.updateEach { it.toRectForm() }
 
-        var kScores = ArrUtils.rearrangeArray(
-            outputClasses,
-            FEATURE_MAP_SIZES,
-            NUM_OF_PRIORS_PER_ACTIVATION,
-            NUM_OF_CLASSES
-        )
-        kScores = ArrUtils.reshape(kScores,
-            NUM_OF_PRIORS,
-            NUM_OF_CLASSES
-        )
-        kScores = ArrUtils.softmax2D(kScores)
+        val scores = rearrangeArray(
+            locations = outputClasses,
+            featureMapSizes = FEATURE_MAP_SIZES,
+            numberOfPriors = NUM_OF_PRIORS_PER_ACTIVATION,
+            locationsPerPrior = NUM_OF_CLASSES
+        ).reshape(NUM_OF_CLASSES)
+        scores.forEach { it.softMax2D() }
 
-        val result = PredictionAPI.predictionAPI(
-            kScores,
-            kBoxes,
-            PROB_THRESHOLD,
-            IOU_THRESHOLD,
-            TOP_K
+        return extractPredictions(
+            scores = scores,
+            boxes = boxes,
+            probabilityThreshold = PROB_THRESHOLD,
+            intersectionOverUnionThreshold = IOU_THRESHOLD,
+            limit = LIMIT
         )
-
-        return if (result.pickedBoxProbabilities.isNotEmpty() && result.pickedLabels.isNotEmpty()) {
-            result.pickedBoxProbabilities.indices.map { i ->
-                DetectionBox(
-                    result.pickedBoxes[i][0],
-                    result.pickedBoxes[i][1],
-                    result.pickedBoxes[i][2],
-                    result.pickedBoxes[i][3],
-                    result.pickedBoxProbabilities[i],
-                    result.pickedLabels[i]
-                )
-            }
-        } else {
-            emptyList()
-        }
     }
 
     override fun executeInference(
@@ -185,22 +167,15 @@ class SSDObjectDetect private constructor(interpreter: Interpreter)
 
         override val isThreadSafe: Boolean = true
 
-        override val url: URL = URL("https://downloads.getbouncer.com/object_detection/v0.0.2/android/ssd.tflite")
+        override val url: URL = URL("https://downloads.getbouncer.com/object_detection/v0.0.4/android/ssd.tflite")
 
-        override val hash: String = "b7331fd09bf479a20e01b77ebf1b5edbd312639edf8dd883aa7b86f4b7fbfa62"
+        override val hash: String = "2f6fdf7abc37a0db4c06281f8b4c00037268b3c6b460840480bfe2c5e1af39e8"
 
         override val tfOptions: Interpreter.Options = Interpreter
             .Options()
             .setUseNNAPI(USE_GPU && hasOpenGl31(context))
             .setNumThreads(NUM_THREADS)
 
-        /**
-         * Pre-download the model from the web to speed up processing time later.
-         */
-        @Throws(FileNotFoundException::class)
-        fun warmUp() { createInterpreter() }
-
-        override fun newInstance(): SSDObjectDetect =
-            SSDObjectDetect(createInterpreter())
+        override fun newInstance(): SSDObjectDetect? = createInterpreter()?.let { SSDObjectDetect(it) }
     }
 }

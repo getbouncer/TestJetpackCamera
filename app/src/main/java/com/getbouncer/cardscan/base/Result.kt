@@ -1,9 +1,9 @@
 package com.getbouncer.cardscan.base
 
-import com.getbouncer.cardscan.base.domain.CardExpiry
-import com.getbouncer.cardscan.base.domain.CardNumber
-import com.getbouncer.cardscan.base.domain.ScanImage
-import com.getbouncer.cardscan.base.domain.CardOcrResult
+import com.getbouncer.cardscan.base.image.ScanImage
+import com.getbouncer.cardscan.base.ml.CardExpiry
+import com.getbouncer.cardscan.base.ml.CardNumber
+import com.getbouncer.cardscan.base.ml.CardOcrResult
 import com.getbouncer.cardscan.base.util.CreditCardUtils
 import java.util.LinkedList
 import java.util.concurrent.atomic.AtomicLong
@@ -367,7 +367,10 @@ abstract class CardOcrResultAggregator<ImageFormat>(
             if (requiredAgreementCount != null) numberCount >= requiredAgreementCount else false
 
         return if (mustReturn || hasMetRequiredAgreementCount) {
-            CardOcrResult(getMostLikelyNumber(), getMostLikelyExpiry())
+            CardOcrResult(
+                getMostLikelyNumber(),
+                getMostLikelyExpiry()
+            )
         } else {
             null
         }

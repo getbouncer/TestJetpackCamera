@@ -1,6 +1,5 @@
 package com.getbouncer.cardscan.base
 
-import android.util.Size
 import com.getbouncer.cardscan.base.util.Timer
 import org.tensorflow.lite.Interpreter
 import kotlin.time.ExperimentalTime
@@ -23,8 +22,6 @@ abstract class MLTensorFlowLiteAnalyzer<Input, MLInput, Output, MLOutput>(
 ) : Analyzer<Input, Output> {
 
     abstract val logTag: String
-
-    abstract val trainedImageSize: Size
 
     abstract fun buildEmptyMLOutput(): MLOutput
 

@@ -3,7 +3,7 @@ package com.getbouncer.cardscan.base.ml
 import android.content.Context
 import android.util.Log
 import android.util.Size
-import com.getbouncer.cardscan.base.domain.ScanImage
+import com.getbouncer.cardscan.base.image.ScanImage
 import com.getbouncer.cardscan.base.image.ImageTransformValues
 import com.getbouncer.cardscan.base.image.hasOpenGl31
 import com.getbouncer.cardscan.base.image.scale
@@ -27,6 +27,8 @@ class ScreenDetect private constructor(interpreter: Interpreter)
         private val IMAGE_MEAN = ImageTransformValues(123.7F, 116.3F, 103.5F)
         private val IMAGE_STD = ImageTransformValues(58.4F, 57.1F, 57.4F)
 
+        private val TRAINED_IMAGE_SIZE = Size(200, 200)
+
         /**
          * How tolerant this algorithm should be of aspect ratios.
          */
@@ -37,7 +39,6 @@ class ScreenDetect private constructor(interpreter: Interpreter)
     }
 
     override val logTag: String = "screen_detect"
-    override val trainedImageSize: Size = Size(200, 200)
 
     override fun buildEmptyMLOutput() = arrayOf(FloatArray(NUM_CLASS))
 
@@ -45,14 +46,14 @@ class ScreenDetect private constructor(interpreter: Interpreter)
         listOf(mlOutput[0][0], mlOutput[0][1])
 
     override fun transformData(data: ScanImage): ByteBuffer =
-        if (data.fullImage.width != trainedImageSize.width || data.fullImage.height != trainedImageSize.height) {
+        if (data.fullImage.width != TRAINED_IMAGE_SIZE.width || data.fullImage.height != TRAINED_IMAGE_SIZE.height) {
             val aspectRatio = data.fullImage.width.toDouble() / data.fullImage.height
-            val targetAspectRatio = trainedImageSize.width.toDouble() / trainedImageSize.height
+            val targetAspectRatio = TRAINED_IMAGE_SIZE.width.toDouble() / TRAINED_IMAGE_SIZE.height
             if (abs(1 - aspectRatio / targetAspectRatio) * 100 > ASPECT_RATIO_TOLERANCE_PCT) {
                 Log.w(logTag, "Provided image ${Size(data.fullImage.width, data.fullImage.height)} is outside " +
                         "target aspect ratio $targetAspectRatio tolerance $ASPECT_RATIO_TOLERANCE_PCT%")
             }
-            data.fullImage.scale(trainedImageSize).toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD)
+            data.fullImage.scale(TRAINED_IMAGE_SIZE).toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD)
         } else {
             data.fullImage.toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD)
         }
@@ -77,7 +78,7 @@ class ScreenDetect private constructor(interpreter: Interpreter)
 
         override val isThreadSafe: Boolean = true
 
-        override val url = URL("https://downloads.getbouncer.com/bob/v0.0.2/android/bob.tflite")
+        override val url = URL("https://downloads.getbouncer.com/bob/v0.0.2/android/bob.tflite_BROKEN")
 
         override val hash = "15b4c25b9bfffa3a2c4a84a5e258d577d571ec152b03d493a29ead36cb9bf668"
 
@@ -86,13 +87,6 @@ class ScreenDetect private constructor(interpreter: Interpreter)
             .setUseNNAPI(USE_GPU && hasOpenGl31(context))
             .setNumThreads(NUM_THREADS)
 
-        /**
-         * Pre-download the model from the web to speed up processing time later.
-         */
-        @Throws(FileNotFoundException::class)
-        fun warmUp() { createInterpreter() }
-
-        override fun newInstance(): ScreenDetect =
-            ScreenDetect(createInterpreter())
+        override fun newInstance(): ScreenDetect? = createInterpreter()?.let { ScreenDetect(it) }
     }
 }

@@ -1,6 +1,7 @@
 package com.getbouncer.cardscan.base
 
 import org.tensorflow.lite.Interpreter
+import java.io.FileNotFoundException
 import java.net.URL
 import java.nio.ByteBuffer
 
@@ -10,7 +11,7 @@ import java.nio.ByteBuffer
 interface AnalyzerFactory<Output : Analyzer<*, *>> {
     val isThreadSafe: Boolean
 
-    fun newInstance(): Output
+    fun newInstance(): Output?
 }
 
 /**
@@ -22,7 +23,11 @@ sealed class TFLAnalyzerFactory<Output : Analyzer<*, *>> :
 
     abstract fun loadModel(): ByteBuffer
 
-    internal fun createInterpreter() = Interpreter(loadModel(), tfOptions)
+    internal fun createInterpreter() = try {
+        Interpreter(loadModel(), tfOptions)
+    } catch (t: Throwable) {
+        null
+    }
 }
 
 /**
@@ -46,6 +51,12 @@ abstract class TFLWebAnalyzerFactory<Output : Analyzer<*, *>>(private val loader
     abstract val url: URL
 
     abstract val hash: String
+
+    /**
+     * Pre-download the model from the web to speed up processing time later.
+     */
+    @Throws(FileNotFoundException::class)
+    fun warmUp() = createInterpreter() != null
 
     private val localFileName: String by lazy { url.path.replace('/', '_') }
 

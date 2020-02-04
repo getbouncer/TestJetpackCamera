@@ -11,12 +11,12 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.getbouncer.cardscan.base.test.R
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.nio.ByteBuffer
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 
 @RunWith(AndroidJUnit4::class)
@@ -28,8 +28,8 @@ class ImageUtilsTest {
     fun bitmap_toRGBByteBuffer_fromPhoto_isCorrect() {
         val bitmap = testResources.getDrawable(R.drawable.ocr_card_numbers_clear, null).toBitmap()
         assertNotNull(bitmap)
-        assertEquals("Bitmap width is not expected", 600, bitmap.width)
-        assertEquals("Bitmap height is not expected", 375, bitmap.height)
+        assertEquals(600, bitmap.width, "Bitmap width is not expected")
+        assertEquals(375, bitmap.height, "Bitmap height is not expected")
 
         // convert the bitmap to a byte buffer
         val convertedImage = bitmap.toRGBByteBuffer(mean = 127.5f, std = 128.5f)
@@ -41,7 +41,7 @@ class ImageUtilsTest {
         rawStream.close()
 
         // check the size of the files
-        assertEquals("File size mismatch", rawImage.limit(), convertedImage.limit())
+        assertEquals(rawImage.limit(), convertedImage.limit(), "File size mismatch")
         rawImage.rewind()
         convertedImage.rewind()
 
@@ -50,18 +50,18 @@ class ImageUtilsTest {
         while (convertedImage.position() < convertedImage.limit()) {
             val rawImageByte = rawImage.get()
             encounteredNonZeroByte = encounteredNonZeroByte || rawImageByte.toInt() != 0
-            assertEquals("Difference at byte ${rawImage.position()}", rawImageByte, convertedImage.get())
+            assertEquals(rawImageByte, convertedImage.get(), "Difference at byte ${rawImage.position()}")
         }
 
-        assertTrue("Bytes were all zero", encounteredNonZeroByte)
+        assertTrue(encounteredNonZeroByte, "Bytes were all zero")
     }
 
     @Test
     fun bitmap_toRGBByteBuffer_generated_isCorrect() {
         val bitmap = generateSampleBitmap()
         assertNotNull(bitmap)
-        assertEquals("Bitmap width is not expected", 100, bitmap.width)
-        assertEquals("Bitmap height is not expected", 100, bitmap.height)
+        assertEquals(100, bitmap.width, "Bitmap width is not expected")
+        assertEquals(100, bitmap.height, "Bitmap height is not expected")
 
         // convert the bitmap to a byte buffer
         val convertedImage = bitmap.toRGBByteBuffer(mean = 127.5f, std = 128.5f)
@@ -73,7 +73,7 @@ class ImageUtilsTest {
         rawStream.close()
 
         // check the size of the files
-        assertEquals("File size mismatch", rawImage.limit(), convertedImage.limit())
+        assertEquals(rawImage.limit(), convertedImage.limit(), "File size mismatch")
         rawImage.rewind()
         convertedImage.rewind()
 
@@ -82,10 +82,10 @@ class ImageUtilsTest {
         while (convertedImage.position() < convertedImage.limit()) {
             val rawImageByte = rawImage.get()
             encounteredNonZeroByte = encounteredNonZeroByte || rawImageByte.toInt() != 0
-            assertEquals("Difference at byte ${rawImage.position()}", rawImageByte, convertedImage.get())
+            assertEquals(rawImageByte, convertedImage.get(), "Difference at byte ${rawImage.position()}")
         }
 
-        assertTrue("Bytes were all zero", encounteredNonZeroByte)
+        assertTrue(encounteredNonZeroByte, "Bytes were all zero")
     }
 
     @Test
@@ -93,17 +93,17 @@ class ImageUtilsTest {
         // read in a sample bitmap file
         val bitmap = testResources.getDrawable(R.drawable.ocr_card_numbers_clear, null).toBitmap()
         assertNotNull(bitmap)
-        assertEquals("Bitmap width is not expected", 600, bitmap.width)
-        assertEquals("Bitmap height is not expected", 375, bitmap.height)
+        assertEquals(600, bitmap.width, "Bitmap width is not expected")
+        assertEquals(375, bitmap.height, "Bitmap height is not expected")
 
         // scale the bitmap
         val scaledBitmap = bitmap.scale(Size(bitmap.width / 5, bitmap.height / 5))
 
         // check the expected sizes of the images
         assertEquals(
-            "Scaled image is the wrong size",
             Size(bitmap.width / 5, bitmap.height / 5),
-            Size(scaledBitmap.width, scaledBitmap.height)
+            Size(scaledBitmap.width, scaledBitmap.height),
+            "Scaled image is the wrong size"
         )
 
         // check each pixel of the images
@@ -114,15 +114,15 @@ class ImageUtilsTest {
             }
         }
 
-        assertTrue("Pixels were all zero", encounteredNonZeroPixel)
+        assertTrue(encounteredNonZeroPixel, "Pixels were all zero")
     }
 
     @Test
     fun bitmap_crop_isCorrect() {
         val bitmap = testResources.getDrawable(R.drawable.ocr_card_numbers_clear, null).toBitmap()
         assertNotNull(bitmap)
-        assertEquals("Bitmap width is not expected", 600, bitmap.width)
-        assertEquals("Bitmap height is not expected", 375, bitmap.height)
+        assertEquals(600, bitmap.width, "Bitmap width is not expected")
+        assertEquals(375, bitmap.height, "Bitmap height is not expected")
 
         // convert the bitmap to a byte buffer
         val croppedBitmap = bitmap.crop(Rect(
@@ -134,9 +134,9 @@ class ImageUtilsTest {
 
         // check the expected sizes of the images
         assertEquals(
-            "Cropped image is the wrong size",
             Size(bitmap.width * 3 / 4 - bitmap.width / 4, bitmap.height * 3 / 4 - bitmap.height / 4),
-            Size(croppedBitmap.width, croppedBitmap.height)
+            Size(croppedBitmap.width, croppedBitmap.height),
+            "Cropped image is the wrong size"
         )
 
         // check each pixel of the images
@@ -145,12 +145,12 @@ class ImageUtilsTest {
             for (y in 0 until croppedBitmap.height) {
                 val croppedPixel = croppedBitmap.getPixel(x, y)
                 val originalPixel = bitmap.getPixel(x + bitmap.width / 4, y + bitmap.height / 4)
-                assertEquals("Difference at pixel $x, $y", originalPixel, croppedPixel)
+                assertEquals(originalPixel, croppedPixel, "Difference at pixel $x, $y")
                 encounteredNonZeroPixel = encounteredNonZeroPixel || croppedPixel != 0
             }
         }
 
-        assertTrue("Pixels were all zero", encounteredNonZeroPixel)
+        assertTrue(encounteredNonZeroPixel, "Pixels were all zero")
     }
 
     private fun generateSampleBitmap(size: Size = Size(100, 100)): Bitmap {

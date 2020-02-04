@@ -4,14 +4,14 @@ import android.graphics.Rect
 import android.util.Size
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import com.getbouncer.cardscan.base.domain.ScanImage
+import com.getbouncer.cardscan.base.image.ScanImage
 import com.getbouncer.cardscan.base.image.crop
 import com.getbouncer.cardscan.base.image.rotate
 import com.getbouncer.cardscan.base.image.toBitmap
 import com.getbouncer.cardscan.base.MemoryBoundAnalyzerLoop
 import com.getbouncer.cardscan.base.util.Timer
-import com.getbouncer.cardscan.base.util.calculateCardCrop
-import com.getbouncer.cardscan.base.util.calculateObjectDetectionCrop
+import com.getbouncer.cardscan.base.ui.util.calculateCardCrop
+import com.getbouncer.cardscan.base.ui.util.calculateObjectDetectionCrop
 import kotlin.time.ExperimentalTime
 
 /**
@@ -46,8 +46,16 @@ class CardImageAnalysisAdapter<Output>(
         return loggingTimer.measure {
             val fullImage = image.toBitmap().rotate(rotationDegrees.toFloat())
             val fullImageSize = Size(fullImage.width, fullImage.height)
-            val objCrop = calculateObjectDetectionCrop(fullImageSize, previewSize, cardFinder)
-            val cardCrop = calculateCardCrop(fullImageSize, previewSize, cardFinder)
+            val objCrop = calculateObjectDetectionCrop(
+                fullImageSize,
+                previewSize,
+                cardFinder
+            )
+            val cardCrop = calculateCardCrop(
+                fullImageSize,
+                previewSize,
+                cardFinder
+            )
 
             ScanImage(
                 fullImage = fullImage,

@@ -1,25 +1,21 @@
 package com.getbouncer.cardscan.base.ml
 
-import com.getbouncer.cardscan.base.domain.ScanImage
+import com.getbouncer.cardscan.base.image.ScanImage
 import com.getbouncer.cardscan.base.Analyzer
 import com.getbouncer.cardscan.base.AnalyzerFactory
 import com.getbouncer.cardscan.base.ml.ssd.DetectionBox
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
-import kotlinx.coroutines.launch
 import kotlin.time.ExperimentalTime
 
 @ExperimentalTime
 class ObjectAndScreenDetect(
     private val coroutineScope: CoroutineScope,
-    private val objectFactory: SSDObjectDetect.Factory,
-    private val screenFactory: ScreenDetect.Factory
+    private val objectDetect: SSDObjectDetect,
+    private val screenDetect: ScreenDetect
 ) : Analyzer<ScanImage, ObjectAndScreenDetect.Prediction> {
 
     data class Prediction(val objectBoxes: List<DetectionBox>, val screenResult: List<Float>)
-
-    private val objectDetect by lazy { objectFactory.newInstance() }
-    private val screenDetect by lazy { screenFactory.newInstance() }
 
     override suspend fun analyze(data: ScanImage): Prediction {
         val objectFuture = coroutineScope.async { objectDetect.analyze(data) }
@@ -38,16 +34,17 @@ class ObjectAndScreenDetect(
     ) : AnalyzerFactory<ObjectAndScreenDetect> {
         override val isThreadSafe: Boolean = true
 
-        fun warmUp() {
-            coroutineScope.launch { objectFactory.warmUp() }
-            coroutineScope.launch { screenFactory.warmUp() }
+        suspend fun warmUp(): Boolean {
+            val objWarmUp = coroutineScope.async { objectFactory.warmUp() }
+            val screenWarmUp = coroutineScope.async { screenFactory.warmUp() }
+            return objWarmUp.await() && screenWarmUp.await()
         }
 
-        override fun newInstance(): ObjectAndScreenDetect =
-            ObjectAndScreenDetect(
-                coroutineScope,
-                objectFactory,
-                screenFactory
-            )
+        override fun newInstance(): ObjectAndScreenDetect? =
+            objectFactory.newInstance()?.let { objectDetect ->
+                screenFactory.newInstance()?.let { screenDetect ->
+                    ObjectAndScreenDetect(coroutineScope, objectDetect, screenDetect)
+                }
+            }
     }
 }

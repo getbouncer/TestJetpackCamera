@@ -4,44 +4,38 @@ import android.content.Context
 import android.util.Log
 import android.util.Size
 import com.getbouncer.cardscan.base.R
-import com.getbouncer.cardscan.base.domain.CardNumber
-import com.getbouncer.cardscan.base.domain.CardOcrResult
-import com.getbouncer.cardscan.base.domain.ScanImage
+import com.getbouncer.cardscan.base.image.ScanImage
 import com.getbouncer.cardscan.base.image.hasOpenGl31
 import com.getbouncer.cardscan.base.image.scale
 import com.getbouncer.cardscan.base.image.toRGBByteBuffer
 import com.getbouncer.cardscan.base.ResourceLoader
 import com.getbouncer.cardscan.base.MLTensorFlowLiteAnalyzer
 import com.getbouncer.cardscan.base.TFLResourceAnalyzerFactory
-import com.getbouncer.cardscan.base.ml.ssd.ArrUtils
 import com.getbouncer.cardscan.base.ml.ssd.DetectionBox
-import com.getbouncer.cardscan.base.ml.ssd.OcrPriorsGen
-import com.getbouncer.cardscan.base.ml.ssd.PredictionAPI
+import com.getbouncer.cardscan.base.ml.ssd.combinePriors
+import com.getbouncer.cardscan.base.ml.ssd.domain.adjustLocations
+import com.getbouncer.cardscan.base.ml.ssd.extractPredictions
+import com.getbouncer.cardscan.base.util.reshape
+import com.getbouncer.cardscan.base.ml.ssd.domain.softMax2D
+import com.getbouncer.cardscan.base.ml.ssd.domain.toRectForm
+import com.getbouncer.cardscan.base.util.updateEach
+import com.getbouncer.cardscan.base.ml.ssd.rearrangeOCRArray
 import com.getbouncer.cardscan.base.util.CreditCardUtils.isValidCardNumber
 import org.tensorflow.lite.Interpreter
 import java.nio.ByteBuffer
-import java.util.Hashtable
 import kotlin.math.abs
 import kotlin.time.ExperimentalTime
 
 /**
- * This is actually an aggregating model. While not a model itself, it makes use of other models
- * to perform analysis.
- *
- * This requires some dependencies to work
- * - factory:       A factory to create the sub models. Alternatively, sub models could be created
- *                  externally and passed in as constructor parameters
- * - context:       An android context used by some sub models. This dependency can be removed if
- *                  sub models are constructed externally
- * - cardRect:      The location of the card within the preview image. This is used for cropping
- *                  the preview image.
- * - resultHandler: A handler for the result. Usually this is the main activity.
+ * This model performs SSD OCR recognition on a card.
  */
 @ExperimentalTime
 class SSDOcr private constructor(interpreter: Interpreter)
     : MLTensorFlowLiteAnalyzer<ScanImage, Array<ByteBuffer>, CardOcrResult, Map<Int, Array<FloatArray>>>(interpreter) {
 
     companion object {
+
+        val TRAINED_IMAGE_SIZE = Size(600, 375)
 
         /** Training images are normalized with mean 127.5 and std 128.5. */
         private const val IMAGE_MEAN = 127.5f
@@ -66,7 +60,7 @@ class SSDOcr private constructor(interpreter: Interpreter)
         private const val NUM_OF_PRIORS_PER_ACTIVATION = 3
 
         /**
-         * We can detect a total of 12 objects plus the background class
+         * We can detect a total of 10 numbers (0 - 9) plus the background class
          */
         private const val NUM_OF_CLASSES = 11
 
@@ -90,25 +84,23 @@ class SSDOcr private constructor(interpreter: Interpreter)
         private const val IOU_THRESHOLD = 0.50f
         private const val CENTER_VARIANCE = 0.1f
         private const val SIZE_VARIANCE = 0.2f
-        private const val TOP_K = 20
+        private const val LIMIT = 20
 
-        private val FEATURE_MAP_SIZES by lazy {
-            Hashtable<String, Int>().apply {
-                this["layerOneWidth"] = 38
-                this["layerOneHeight"] = 24
-                this["layerTwoWidth"] = 19
-                this["layerTwoHeight"] = 12
-            }
-        }
+        private val FEATURE_MAP_SIZES =
+            OcrFeatureMapSizes(
+                layerOneWidth = 38,
+                layerOneHeight = 24,
+                layerTwoWidth = 19,
+                layerTwoHeight = 12
+            )
 
         /**
          * This value should never change, and is thread safe.
          */
-        private val PRIORS by lazy { OcrPriorsGen.combinePriors() }
+        private val PRIORS = combinePriors()
     }
 
     override val logTag: String = "ssd_ocr"
-    override val trainedImageSize: Size = Size(600, 375)
 
     /**
      * The model reshapes all the data to 1 x [All Data Points]
@@ -119,82 +111,61 @@ class SSDOcr private constructor(interpreter: Interpreter)
     )
 
     override fun transformData(data: ScanImage): Array<ByteBuffer> =
-        if (data.ocrImage.width != trainedImageSize.width || data.ocrImage.height != trainedImageSize.height) {
+        if (data.ocrImage.width != TRAINED_IMAGE_SIZE.width || data.ocrImage.height != TRAINED_IMAGE_SIZE.height) {
             val aspectRatio = data.ocrImage.width.toDouble() / data.ocrImage.height
-            val targetAspectRatio = trainedImageSize.width.toDouble() / trainedImageSize.height
+            val targetAspectRatio = TRAINED_IMAGE_SIZE.width.toDouble() / TRAINED_IMAGE_SIZE.height
             if (abs(1 - aspectRatio / targetAspectRatio) * 100 > ASPECT_RATIO_TOLERANCE_PCT) {
                 Log.w(logTag, "Provided image ${Size(data.ocrImage.width, data.ocrImage.height)} is outside " +
                         "target aspect ratio $targetAspectRatio tolerance $ASPECT_RATIO_TOLERANCE_PCT%")
             }
-            arrayOf(data.ocrImage.scale(trainedImageSize).toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD))
+            arrayOf(data.ocrImage.scale(TRAINED_IMAGE_SIZE).toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD))
         } else {
             arrayOf(data.ocrImage.toRGBByteBuffer(mean = IMAGE_MEAN, std = IMAGE_STD))
         }
 
-    @Synchronized
     override fun interpretMLOutput(data: ScanImage, mlOutput: Map<Int, Array<FloatArray>>): CardOcrResult {
         val outputClasses = mlOutput[0] ?: arrayOf(FloatArray(NUM_CLASS))
         val outputLocations = mlOutput[1] ?: arrayOf(FloatArray(NUM_LOC))
 
-        var kBoxes = ArrUtils.rearrangeOCRArray(
-            outputLocations,
-            FEATURE_MAP_SIZES,
-            NUM_OF_PRIORS_PER_ACTIVATION,
-            NUM_OF_COORDINATES
+        val boxes = rearrangeOCRArray(
+            locations = outputLocations,
+            featureMapSizes = FEATURE_MAP_SIZES,
+            numberOfPriors = NUM_OF_PRIORS_PER_ACTIVATION,
+            locationsPerPrior = NUM_OF_COORDINATES
+        ).reshape(NUM_OF_COORDINATES)
+        boxes.adjustLocations(
+            priors = PRIORS,
+            centerVariance = CENTER_VARIANCE,
+            sizeVariance = SIZE_VARIANCE
         )
-        kBoxes = ArrUtils.reshape(
-            kBoxes,
-            NUM_OF_PRIORS,
-            NUM_OF_COORDINATES
-        )
-        kBoxes = ArrUtils.convertLocationsToBoxes(
-            kBoxes,
-            PRIORS,
-            CENTER_VARIANCE,
-            SIZE_VARIANCE
-        )
-        kBoxes = ArrUtils.centerFormToCornerForm(kBoxes)
+        boxes.updateEach { it.toRectForm() }
 
-        var kScores = ArrUtils.rearrangeOCRArray(
-            outputClasses,
-            FEATURE_MAP_SIZES,
-            NUM_OF_PRIORS_PER_ACTIVATION,
-            NUM_OF_CLASSES
-        )
-        kScores = ArrUtils.reshape(
-            kScores,
-            NUM_OF_PRIORS,
-            NUM_OF_CLASSES
-        )
-        kScores = ArrUtils.softmax2D(kScores)
+        val scores = rearrangeOCRArray(
+            locations = outputClasses,
+            featureMapSizes = FEATURE_MAP_SIZES,
+            numberOfPriors = NUM_OF_PRIORS_PER_ACTIVATION,
+            locationsPerPrior = NUM_OF_CLASSES
+        ).reshape(NUM_OF_CLASSES)
+        scores.forEach { it.softMax2D() }
 
-        val result = PredictionAPI.predictionAPI(
-            kScores,
-            kBoxes,
-            PROB_THRESHOLD,
-            IOU_THRESHOLD,
-            TOP_K
-        )
+        val detectedBoxes = extractPredictions(
+            scores = scores,
+            boxes = boxes,
+            probabilityThreshold = PROB_THRESHOLD,
+            intersectionOverUnionThreshold = IOU_THRESHOLD,
+            limit = LIMIT,
+            classifierToLabel = { if (it == 10) 0 else it }
+        ).sortedBy { it.rect.left }
 
-        val objectBoxes = if (result.pickedBoxProbabilities.isNotEmpty() && result.pickedLabels.isNotEmpty()) {
-            result.pickedBoxProbabilities.indices.map { i ->
-                val label = if (result.pickedLabels[i] == 10) 0 else result.pickedLabels[i]
-                DetectionBox(
-                    result.pickedBoxes[i][0],
-                    result.pickedBoxes[i][1],
-                    result.pickedBoxes[i][2],
-                    result.pickedBoxes[i][3],
-                    result.pickedBoxProbabilities[i],
-                    label
-                )
-            }
-        } else {
-            emptyList()
-        }.sorted()
-
-        val predictedNumber = objectBoxes.map { it.label }.joinToString("")
+        val predictedNumber = detectedBoxes.map { it.label }.joinToString("")
         return if (isValidCardNumber(predictedNumber)) {
-            CardOcrResult(CardNumber(predictedNumber, objectBoxes), null)
+            CardOcrResult(
+                number = CardNumber(
+                    predictedNumber,
+                    detectedBoxes
+                ),
+                expiry = null
+            )
         } else {
             CardOcrResult(null, null)
         }
@@ -219,14 +190,27 @@ class SSDOcr private constructor(interpreter: Interpreter)
 
         override val isThreadSafe: Boolean = true
 
-        override val modelFileResource: Int = R.raw.ssdelrond0136
+        override val modelFileResource: Int = R.raw.darknite
 
         override val tfOptions: Interpreter.Options = Interpreter
             .Options()
             .setUseNNAPI(USE_GPU && hasOpenGl31(context))
             .setNumThreads(NUM_THREADS)
 
-        override fun newInstance(): SSDOcr =
-            SSDOcr(createInterpreter())
+        override fun newInstance(): SSDOcr? = createInterpreter()?.let {
+            SSDOcr(it)
+        }
     }
 }
+
+data class CardOcrResult(val number: CardNumber?, val expiry: CardExpiry?)
+data class CardNumber(val number: String, val boxes: Collection<DetectionBox>)
+data class CardExpiry(val day: String?, val month: String, val year: String, val boxes: Collection<DetectionBox>)
+
+data class OcrFeatureMapSizes(
+    val layerOneWidth: Int,
+    val layerOneHeight: Int,
+    val layerTwoWidth: Int,
+    val layerTwoHeight: Int
+)
+

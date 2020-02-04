@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.domain
+package com.getbouncer.cardscan.base.image
 
 import android.graphics.Bitmap
 

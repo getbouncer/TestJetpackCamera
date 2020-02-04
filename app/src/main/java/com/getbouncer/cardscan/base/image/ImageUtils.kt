@@ -49,38 +49,24 @@ fun ImageProxy.toBitmap(
     return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
 }
 
-/**
- * Pixel3: 39.10 FPS, 25.58 MS/F
- */
-fun Bitmap.toRGBByteBuffer(mean: Float = 0F, std: Float = 255F): ByteBuffer {
-    val argb = IntArray(width * height).also {
-        getPixels(it, 0, width, 0, 0, width, height)
-    }
-
-    val rgbFloat = ByteBuffer.allocateDirect(this.width * this.height * DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL)
-    rgbFloat.order(ByteOrder.nativeOrder())
-    argb.forEach {
-        // ignore the alpha value ((it shr 24 and 0xFF) - mean) / std)
-        rgbFloat.putFloat(((it shr 16 and 0xFF) - mean) / std)
-        rgbFloat.putFloat(((it shr 8 and 0xFF) - mean) / std)
-        rgbFloat.putFloat(((it and 0xFF) - mean) / std)
-    }
-
-    rgbFloat.rewind()
-    return rgbFloat
-}
+fun Bitmap.toRGBByteBuffer(mean: Float = 0F, std: Float = 255F): ByteBuffer =
+    this.toRGBByteBuffer(ImageTransformValues(mean, mean, mean), ImageTransformValues(std, std, std))
 
 data class ImageTransformValues(val red: Float, val green: Float, val blue: Float)
 
+/**
+ * Pixel3: 39.10 FPS, 25.58 MS/F
+ */
 fun Bitmap.toRGBByteBuffer(mean: ImageTransformValues, std: ImageTransformValues): ByteBuffer {
     val argb = IntArray(width * height).also {
         getPixels(it, 0, width, 0, 0, width, height)
     }
 
-    val rgbFloat = ByteBuffer.allocateDirect(this.width * this.height * DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL)
+    val rgbFloat = ByteBuffer.allocateDirect(
+        this.width * this.height * DIM_PIXEL_SIZE * NUM_BYTES_PER_CHANNEL)
     rgbFloat.order(ByteOrder.nativeOrder())
     argb.forEach {
-        // ignore the alpha value ((it shr 24 and 0xFF) - mean) / std)
+        // ignore the alpha value ((it shr 24 and 0xFF) - mean.alpha) / std.alpha)
         rgbFloat.putFloat(((it shr 16 and 0xFF) - mean.red) / std.red)
         rgbFloat.putFloat(((it shr 8 and 0xFF) - mean.green) / std.green)
         rgbFloat.putFloat(((it and 0xFF) - mean.blue) / std.blue)

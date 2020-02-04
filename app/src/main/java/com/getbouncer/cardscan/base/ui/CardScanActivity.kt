@@ -20,8 +20,7 @@ import com.getbouncer.cardscan.base.camera.CardImageAnalysisAdapter
 import com.getbouncer.cardscan.base.config.IS_DEBUG
 import com.getbouncer.cardscan.base.config.MEASURE_TIME
 import com.getbouncer.cardscan.base.config.TEST_CARD_NUMBER
-import com.getbouncer.cardscan.base.domain.CardOcrResult
-import com.getbouncer.cardscan.base.domain.ScanImage
+import com.getbouncer.cardscan.base.image.ScanImage
 import com.getbouncer.cardscan.base.AggregateResultListener
 import com.getbouncer.cardscan.base.CardImageOcrResultAggregator
 import com.getbouncer.cardscan.base.FiniteAnalyzerLoop
@@ -31,13 +30,15 @@ import com.getbouncer.cardscan.base.ResultAggregatorConfig
 import com.getbouncer.cardscan.base.ResultHandler
 import com.getbouncer.cardscan.base.ml.ObjectAndScreenDetect
 import com.getbouncer.cardscan.base.ml.SSDObjectDetect
-import com.getbouncer.cardscan.base.ml.SSDOcr
 import com.getbouncer.cardscan.base.ml.ScreenDetect
+import com.getbouncer.cardscan.base.ml.CardOcrResult
+import com.getbouncer.cardscan.base.ml.SSDOcr
 import com.getbouncer.cardscan.base.util.CreditCardUtils
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import java.io.FileNotFoundException
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.ClockMark
@@ -77,7 +78,7 @@ class CardScanActivity : AppCompatActivity(),
         }
 
         // Start the object detector downloading
-        objectAndScreenDetectFactory.warmUp()
+        launch { objectAndScreenDetectFactory.warmUp() }
     }
 
     override fun onRequestPermissionsResult(
@@ -154,7 +155,12 @@ class CardScanActivity : AppCompatActivity(),
             },
             coroutineScope = this
         )
-        completionLoop.start()
+
+        try {
+            completionLoop.start()
+        } catch (e: FileNotFoundException) {
+            Log.e("Bouncer", "Unable to start completion loop due to file download error")
+        }
     }
 
     /**

@@ -6,12 +6,18 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.getbouncer.cardscan.base.R
 import com.getbouncer.cardscan.base.ResourceLoader
 import com.getbouncer.cardscan.base.WebLoader
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import com.getbouncer.cardscan.base.ml.SSDObjectDetect
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
+import java.io.FileNotFoundException
 import java.net.URL
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+import kotlin.time.ExperimentalTime
 
+@ExperimentalTime
 @RunWith(AndroidJUnit4::class)
 class ModelFactoryTest {
     private val appContext = InstrumentationRegistry.getInstrumentation().targetContext
@@ -20,7 +26,7 @@ class ModelFactoryTest {
     @SmallTest
     fun loadModelFromResource_correct() {
         val byteBuffer = ResourceLoader(appContext).loadModelFromResource(R.raw.ssdelrond0136)
-        assertEquals("File is not expected size", 3265588, byteBuffer.limit())
+        assertEquals(3265588, byteBuffer.limit(), "File is not expected size")
         byteBuffer.rewind()
 
         // ensure not all bytes are zero
@@ -28,7 +34,7 @@ class ModelFactoryTest {
         while (!encounteredNonZeroByte) {
             encounteredNonZeroByte = byteBuffer.get().toInt() != 0
         }
-        assertTrue("All bytes were zero", encounteredNonZeroByte)
+        assertTrue(encounteredNonZeroByte, "All bytes were zero")
 
         // ensure bytes 5-8 are "TFL3" ASCII encoded
         byteBuffer.position(4)
@@ -41,12 +47,19 @@ class ModelFactoryTest {
     @Test
     @SmallTest
     fun loadModelFromWeb_correct() {
+        val localFileName = "test_loadModelFromWeb_correct"
+        val localFile = File(appContext.cacheDir, localFileName)
+        if (localFile.exists()) {
+            localFile.delete()
+        }
+
+        val factory = SSDObjectDetect.Factory(appContext)
         val byteBuffer = WebLoader(appContext).loadModelFromWeb(
-            URL("https://downloads.getbouncer.com/object_detection/v0.0.2/android/ssd.tflite"),
-            "_object_detection_v0.0.2_android_ssd.tflite",
-            "b7331fd09bf479a20e01b77ebf1b5edbd312639edf8dd883aa7b86f4b7fbfa62"
+            factory.url,
+            localFileName,
+            factory.hash
         )
-        assertEquals("File is not expected size", 4983688, byteBuffer.limit())
+        assertEquals(4983688, byteBuffer.limit(), "File is not expected size")
         byteBuffer.rewind()
 
         // ensure not all bytes are zero
@@ -54,7 +67,7 @@ class ModelFactoryTest {
         while (!encounteredNonZeroByte) {
             encounteredNonZeroByte = byteBuffer.get().toInt() != 0
         }
-        assertTrue("All bytes were zero", encounteredNonZeroByte)
+        assertTrue(encounteredNonZeroByte, "All bytes were zero")
 
         // ensure bytes 5-8 are "TFL3" ASCII encoded
         byteBuffer.position(4)
@@ -62,5 +75,24 @@ class ModelFactoryTest {
         assertEquals(byteBuffer.get().toChar(), 'F')
         assertEquals(byteBuffer.get().toChar(), 'L')
         assertEquals(byteBuffer.get().toChar(), '3')
+    }
+
+    @Test
+    @SmallTest
+    fun loadModelFromWeb_fail() {
+        val localFileName = "test_loadModelFromWeb_fail"
+        val localFile = File(appContext.cacheDir, localFileName)
+        if (localFile.exists()) {
+            localFile.delete()
+        }
+
+        val factory = SSDObjectDetect.Factory(appContext)
+        assertFailsWith<FileNotFoundException> {
+            WebLoader(appContext).loadModelFromWeb(
+                URL(factory.url.toString() + "-BROKEN"),
+                localFileName,
+                factory.hash
+            )
+        }
     }
 }

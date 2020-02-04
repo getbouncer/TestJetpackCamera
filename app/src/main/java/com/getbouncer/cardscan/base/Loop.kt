@@ -1,5 +1,6 @@
 package com.getbouncer.cardscan.base
 
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
@@ -69,11 +70,15 @@ sealed class AnalyzerLoop<DataFrame, Output>(
      */
     private fun startWorker() = coroutineScope.launch {
         val analyzer = analyzerFactory.newInstance()
-        for (frame in channel) {
-            onResult(analyzer.analyze(frame), frame)
-            if (isFinished() && coroutineContext.isActive) {
-                coroutineContext.cancel()
+        if (analyzer != null) {
+            for (frame in channel) {
+                onResult(analyzer.analyze(frame), frame)
+                if (isFinished() && coroutineContext.isActive) {
+                    coroutineContext.cancel()
+                }
             }
+        } else {
+            Log.e("Bouncer", "Worker for loop ${this@AnalyzerLoop::class.java.simpleName} is null.")
         }
     }
 

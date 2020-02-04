@@ -32,13 +32,12 @@ class ResourceLoader(private val context: Context) {
     @Throws(IOException::class)
     fun loadModelFromResource(resource: Int): ByteBuffer =
         context.resources.openRawResourceFd(resource).use {
-            fileDescriptor -> FileInputStream(fileDescriptor.fileDescriptor).use {
-                input ->
-            readFileToByteBuffer(
-                input,
-                fileDescriptor.startOffset,
-                fileDescriptor.declaredLength
-            )
+            fileDescriptor -> FileInputStream(fileDescriptor.fileDescriptor).use { input ->
+                readFileToByteBuffer(
+                    input,
+                    fileDescriptor.startOffset,
+                    fileDescriptor.declaredLength
+                )
             }
         }
 }

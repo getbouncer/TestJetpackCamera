@@ -1,4 +1,4 @@
-package com.getbouncer.cardscan.base.util
+package com.getbouncer.cardscan.base.ui.util
 
 import android.graphics.Point
 import android.graphics.Rect
@@ -47,7 +47,8 @@ fun calculateCardFinderRect(
 
     // calculate the maximum size of the card. Ensure that a square will fit as well for object
     // detection
-    val squareSize = maxAspectRatioInSize(paddedSize, Rational(1, 1))
+    val squareSize =
+        maxAspectRatioInSize(paddedSize, Rational(1, 1))
     val cardSize = maxAspectRatioInSize(squareSize, cardRatio)
 
     // calculate the card position
@@ -112,9 +113,9 @@ private fun scaleAndPositionPreviewImage(fullImage: Size, previewImage: Size): R
     // Since the preview image may be at a different resolution than the full image, scale the
     // preview image to be circumscribed by the fullImage.
     val scaledPreviewImageSize = maxAspectRatioInSize(
-            fullImage,
-            Rational(previewImage.width, previewImage.height)
-        )
+        fullImage,
+        Rational(previewImage.width, previewImage.height)
+    )
     val scaledPreviewImageLeft = (fullImage.width - scaledPreviewImageSize.width) / 2
     val scaledPreviewImageTop = (fullImage.height - scaledPreviewImageSize.height) / 2
     return Rect(
@@ -142,7 +143,8 @@ fun calculateCardCrop(fullImage: Size, previewImage: Size, cardFinder: Rect): Re
     ) { "Card finder is outside preview image bounds" }
 
     // Scale the previewImage to match the fullImage
-    val scaledPreviewImage = scaleAndPositionPreviewImage(fullImage, previewImage)
+    val scaledPreviewImage =
+        scaleAndPositionPreviewImage(fullImage, previewImage)
     val previewScale = scaledPreviewImage.width().toFloat() / previewImage.width
 
     // Scale the cardFinder to match the scaledPreviewImage
@@ -166,7 +168,8 @@ fun calculateCardCrop(fullImage: Size, previewImage: Size, cardFinder: Rect): Re
  * Given a card finder region of a preview image, calculate the associated object detection square.
  */
 private fun calculateObjectDetectionFromCardFinder(previewImage: Size, cardFinder: Rect): Rect {
-    val objectDetectionSquareSize = maxAspectRatioInSize(previewImage, Rational(1, 1))
+    val objectDetectionSquareSize =
+        maxAspectRatioInSize(previewImage, Rational(1, 1))
     return Rect(
         /* left */ max(0, cardFinder.centerX() - objectDetectionSquareSize.width / 2),
         /* top */ max(0, cardFinder.centerY() - objectDetectionSquareSize.height / 2),
@@ -187,9 +190,14 @@ fun calculateObjectDetectionCrop(fullImage: Size, previewImage: Size, cardFinder
     ) { "Card finder is outside preview image bounds" }
 
     // Calculate the object detection square based on the card finder, limited by the preview
-    val objectDetectionSquare = calculateObjectDetectionFromCardFinder(previewImage, cardFinder)
+    val objectDetectionSquare =
+        calculateObjectDetectionFromCardFinder(
+            previewImage,
+            cardFinder
+        )
 
-    val scaledPreviewImage = scaleAndPositionPreviewImage(fullImage, previewImage)
+    val scaledPreviewImage =
+        scaleAndPositionPreviewImage(fullImage, previewImage)
     val previewScale = scaledPreviewImage.width().toFloat() / previewImage.width
 
     // Scale the objectDetectionSquare to match the scaledPreviewImage

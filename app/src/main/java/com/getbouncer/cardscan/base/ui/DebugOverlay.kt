@@ -10,7 +10,7 @@ import android.view.View
 import com.getbouncer.cardscan.base.R
 import com.getbouncer.cardscan.base.ml.ssd.DetectionBox
 
-fun RectF.scaled(scaledSize: Size): RectF {
+private fun RectF.scaled(scaledSize: Size): RectF {
     return RectF(
         this.left * scaledSize.width,
         this.top * scaledSize.height,
@@ -36,7 +36,7 @@ class DebugOverlay(context: Context, attrs: AttributeSet?) : View(context, attrs
     private fun drawBoxes(canvas: Canvas) {
         boxes?.forEach {
             paint.color = getPaintColor(it.confidence)
-            canvas.drawRect(it.scaled(Size(this.width, this.height)), paint)
+            canvas.drawRect(it.rect.scaled(Size(this.width, this.height)), paint)
         }
     }
 
